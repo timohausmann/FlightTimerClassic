@@ -1,8 +1,8 @@
 --[[--------------------------------------------------------------------
-	Flight Timer Classic
+	Flight Timer Classic by Nomana-Kingsfall
 	CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/)
 	Huge credit to PhanxFlightTimer, InFlight and Consequence-Flightmaster
-	which helped me alot to put this together as my first addon
+	which helped me to put together FTC as my first addon
 	https://github.com/phanx-wow/PhanxFlightTimer
 	https://www.curseforge.com/wow/addons/inflight-taxi-timer
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
@@ -35,7 +35,8 @@ Addon:SetScript("OnEvent", function(self, event, ...)
 	return self[event] and self[event](self, ...)
 end)
 
-local currentName, currentHash, startName, startPoint, startTime, endName, endHash, endTime
+local currentName, currentHash, startTime, endName, endHash, endTime
+local showDebug = false
 
 local function Frame_OnMouseDown(frame)
 	frame:StartMoving()
@@ -53,6 +54,10 @@ end
 local function getTaxiNodeInfo(i)
 	local name = strmatch(TaxiNodeName(i), "[^,]+")
 	return name, getTaxiNodeHash(i)
+end
+
+local function consoleLog(text)
+	print(format("|cff00ccff[FlightTimerClassic]|cff66ddff %s", text))
 end
 
 local function getFormattedTime(t)
@@ -85,14 +90,17 @@ local function CopyFrame_Show(text)
 		CopyFrame:SetSize(480,360)
 		CopyFrame:SetPoint("CENTER")
 
-		print("CreateFrame")
-
 		CopyFrame:SetBackdrop({
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
 			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
 			tile = true, tileSize = 32, edgeSize = 16,
 			insets = { left = 8, right = 8, top = 8, bottom = 8 }
 		})
+
+		CopyFrame.text = CopyFrame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
+		CopyFrame.text:SetWidth(400)
+		CopyFrame.text:SetPoint("CENTER", CopyFrame, "TOP", 0, -30)
+		CopyFrame.text:SetText("Please share this data with Flight Timer Classic.\nThanks for helping to improve this AddOn.")
 
 		CopyFrame.scrollFrame = CreateFrame("ScrollFrame", "MyMultiLineEditBox", CopyFrame, "InputScrollFrameTemplate")
 		CopyFrame.scrollFrame:SetSize(480-32,240)
@@ -104,7 +112,7 @@ local function CopyFrame_Show(text)
 		CopyFrame.scrollFrame.EditBox:SetScript("OnEscapePressed", function() CopyFrame:Hide() end)
 
 		CopyFrame.CloseButton = CreateFrame("Button", nil, CopyFrame, "GameMenuButtonTemplate");
-		CopyFrame.CloseButton:SetPoint("BOTTOM", CopyFrame, "BOTTOM", 0, 12);
+		CopyFrame.CloseButton:SetPoint("BOTTOM", CopyFrame, "BOTTOM", 0, 20);
 		CopyFrame.CloseButton:SetSize(96, 24);
 		CopyFrame.CloseButton:SetText("Close");
 		CopyFrame.CloseButton:SetScript("OnClick", function() CopyFrame:Hide() end)
@@ -115,20 +123,6 @@ local function CopyFrame_Show(text)
 	CopyFrame.scrollFrame.EditBox:HighlightText()
 	CopyFrame:Show()
 end
-
---[[
--- /run StaticPopup_Show("TestPopup")
-local someVar
-StaticPopupDialogs.TestPopup = {
-    text = "Some text",
-    button1 = OKAY,
-    OnAccept = function(self)
-        someVar = self.editBox:GetText()
-        print(someVar)
-    end,
-    hasEditBox = 1,
-}
---]]
 
 local FlightFrame
 local function FlightFrame_Show()
@@ -174,36 +168,11 @@ local function FlightFrame_Show()
 			end
 		end)
 
-		--[[
-
-		FlightFrame.text = FlightFrame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
-		FlightFrame.text:SetWidth(300)
-		FlightFrame.text:SetPoint("CENTER", FlightFrame, "TOP", 0, -20)
-
-		FlightFrame.bar = CreateFrame("StatusBar", nil, FlightFrame)
-		FlightFrame.bar:SetStatusBarTexture("Interface\\TargetingFrame\\UI-StatusBar")
-		FlightFrame.bar:GetStatusBarTexture():SetHorizTile(false)
-		FlightFrame.bar:SetMinMaxValues(0, 100)
-		FlightFrame.bar:SetValue(100)
-		FlightFrame.bar:SetWidth(200)
-		FlightFrame.bar:SetHeight(12)
-		FlightFrame.bar:SetPoint("CENTER",FlightFrame,"BOTTOM", 0, 20)
-		FlightFrame.bar:SetStatusBarColor(0,1,0)
-		FlightFrame.bar:SetFrameLevel(10)
-		]]--
-
 		FlightFrame.time = FlightFrame:CreateFontString(nil, "BACKGROUND", "GameFontHighlight")
 		FlightFrame.time:SetPoint("CENTER", FlightFrame, "CENTER")
 
 		FlightFrame:Show()
 	end
-
-	--if endName ~= nil then
-	--	FlightFrame.text:SetText(L.FlyingTo .. " " .. endName)
-	--else
-	--	FlightFrame.text:SetText("Flying")
-	--	print("|cffff4444[FlightTimerClassic]|r endName not found")
-	--end
 
 	local t = defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
 	FlightFrame.time:SetText(getFormattedTime(t))
@@ -214,7 +183,7 @@ local function FlightFrame_Hide()
 	end
 end
 
-function Addon:PLAYER_LOGIN()
+function Addon:PLAYER_LOGIN()  
 	local faction = UnitFactionGroup("player")
 	
 	--FlightFrame_Show()
@@ -225,10 +194,33 @@ function Addon:PLAYER_LOGIN()
 		self:RegisterEvent("PLAYER_CONTROL_GAINED")
 		self:RegisterEvent("TAXIMAP_OPENED")
 		
-		print(format("|cffff4444[FlightTimerClassic]|r loaded for %q", faction))
+		consoleLog(faction .. ' Flightpaths loaded.')
+		print()
 	else
-		print(format("|cffff4444[FlightTimerClassic]|r no flight data found for %q", faction))
+		consoleLog("No flight data found for" .. faction .. '.')
 	end
+
+	
+	local function FTCCommands(msg, editbox)
+		if msg == 'debug' then
+			showDebug = not showDebug
+
+			if showDebug then
+				consoleLog('Debug enabled. Type /ftc debug again to disable.')
+			else
+				consoleLog('Debug disabled. Type /ftc debug again to enable.')
+			end
+		elseif msg == 'help' then
+			consoleLog('/ftc debug – Enable/disable debug output.')
+			consoleLog('/ftc help – Show this help text.')
+		else
+			consoleLog('unkown command. Type /ftc help to see all commands.')
+		end
+	end
+	
+	SLASH_FLIGHTIMERCLASSIC1, SLASH_FLIGHTIMERCLASSIC2 = '/ftc', '/flighttimerclassic'
+	
+	SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
 --
 end
 
@@ -238,7 +230,7 @@ function Addon:PLAYER_CONTROL_GAINED()
 end
 
 function Addon:TAXIMAP_OPENED()
-	print("TAXIMAP_OPENED")
+	--print("TAXIMAP_OPENED")
 
 	local nodesInfo = "name;x;y"
 
@@ -255,7 +247,9 @@ function Addon:TAXIMAP_OPENED()
 		nodesInfo = nodesInfo .. "\n" .. name .. ";" .. x .. ";" .. y
 	end
 
-	--CopyFrame_Show(nodesInfo)
+	if showDebug then
+		CopyFrame_Show(nodesInfo)
+	end
 end
 
 hooksecurefunc("TaxiNodeOnButtonEnter", function(button)
@@ -283,7 +277,12 @@ hooksecurefunc("TakeTaxiNode", function(i)
 	local t = defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
 
 	startTime = now
-	endTime = startTime + t
+
+	if t == nil then
+		endTime = nil
+	else
+		endTime = startTime + t
+	end
 
 	FlightFrame_Show()
 end)
@@ -294,22 +293,6 @@ hooksecurefunc("AcceptBattlefieldPort", function(index, accept)
 end)
 
 hooksecurefunc(C_SummonInfo, "ConfirmSummon", function()
-	--porttaken = true
 	print("|cffff8080Summon|cff208080, porttaken -|r")
+	FlightFrame_Hide()
 end)
-
---[[
-TaxiFrame:HookScript("OnShow", function(self)
-	print("TaxiFrame OnShow")
-end)
-
-function Addon:PLAYER_CONTROL_LOST()
-	print("PLAYER_CONTROL_LOST")
-end
-
-hooksecurefunc("TaxiRequestEarlyLanding", function()
-	porttaken = true
-	PrintD("|cffff8080Taxi Early|cff208080, porttaken -|r", porttaken)
-end)
-
---]]

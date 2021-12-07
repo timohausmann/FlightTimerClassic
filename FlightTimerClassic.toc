@@ -3,7 +3,7 @@
 ## Title: Flight Timer Classic
 ## Notes: Records and displays flight durations
 ## Author: Nomana
-## Version: 0.1
+## Version: 0.2
 ## SavedVariables: FlightData
 FlightTimerClassic.lua
 Data.lua
