@@ -8,6 +8,18 @@
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
 ----------------------------------------------------------------------]]
 
+FTCCustomData = { Alliance = {}, Horde = {} }
+
+local currentName, currentHash, startTime, endName, endHash, endTime, estimatedT
+local showDebug = false
+local defaultTimes = {}
+local customTimes = {}
+
+
+--[[
+Localization
+--]]
+
 local L = {
 	EstimatedTime = "Estimated time:",
 	FlyingFrom = "Flying from:",
@@ -25,18 +37,10 @@ elseif strmatch(GetLocale(), "^es") then
 	L.FlyingTo = "Vuelo a:"
 end
 
-local defaultTimes = {}
 
-local Addon = CreateFrame("Frame", "FlightTimerClassic", UIParent)
-
-Addon:UnregisterAllEvents()
-Addon:RegisterEvent("PLAYER_LOGIN")
-Addon:SetScript("OnEvent", function(self, event, ...)
-	return self[event] and self[event](self, ...)
-end)
-
-local currentName, currentHash, startTime, endName, endHash, endTime
-local showDebug = false
+--[[
+Local Functions
+--]]
 
 local function Frame_OnMouseDown(frame)
 	frame:StartMoving()
@@ -72,6 +76,33 @@ local function getFormattedTime(t)
 	end
 end
 
+
+--[[
+Slash Commands
+--]]
+
+local function FTCCommands(msg, editbox)
+	if msg == 'debug' then
+		showDebug = not showDebug
+
+		if showDebug then
+			consoleLog('Debug enabled. Type |cffcceeff/ftc debug |cff66ddffagain to disable.')
+		else
+			consoleLog('Debug disabled. Type |cffcceeff/ftc debug |cff66ddffagain to enable.')
+		end
+	elseif msg == 'help' then
+		consoleLog('|cffcceeff/ftc debug |cff66ddff– Enable/disable debug output.')
+		consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help text.')
+	else
+		consoleLog('unkown command. Type |cffcceeff/ftc help |cff66ddffto see all commands.')
+	end
+end
+
+SLASH_FLIGHTIMERCLASSIC1 = '/ftc'
+
+SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
+
+
 --[[
 CopyFrame
 https://www.wowinterface.com/forums/showthread.php?t=55498
@@ -100,7 +131,7 @@ local function CopyFrame_Show(text)
 		CopyFrame.text = CopyFrame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
 		CopyFrame.text:SetWidth(400)
 		CopyFrame.text:SetPoint("CENTER", CopyFrame, "TOP", 0, -30)
-		CopyFrame.text:SetText("Please share this data with Flight Timer Classic.\nThanks for helping to improve this AddOn.")
+		CopyFrame.text:SetText("Please share this data with Flight Timer Classic.\nThanks for your contribution to improve this AddOn.")
 
 		CopyFrame.scrollFrame = CreateFrame("ScrollFrame", "MyMultiLineEditBox", CopyFrame, "InputScrollFrameTemplate")
 		CopyFrame.scrollFrame:SetSize(480-32,240)
@@ -123,6 +154,11 @@ local function CopyFrame_Show(text)
 	CopyFrame.scrollFrame.EditBox:HighlightText()
 	CopyFrame:Show()
 end
+
+
+--[[
+FlightFrame
+--]]
 
 local FlightFrame
 local function FlightFrame_Show()
@@ -151,8 +187,12 @@ local function FlightFrame_Show()
 			GameTooltip:AddDoubleLine(L.FlyingFrom, currentName, 1, 0.82, 0, 1, 1, 1)
 			GameTooltip:AddDoubleLine(L.FlyingTo, endName, 1, 0.82, 0, 1, 1, 1)
 			
-			local t = defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
-			GameTooltip:AddDoubleLine(L.EstimatedTime, getFormattedTime(t), 1, 0.82, 0, 1, 1, 1)
+			if estimatedT then
+				GameTooltip:AddDoubleLine(L.EstimatedTime, getFormattedTime(estimatedT), 1, 0.82, 0, 1, 1, 1)
+			else
+				GameTooltip:AddDoubleLine(L.EstimatedTime, UNKNOWN, 1, 0.82, 0, 0.6, 0.6, 0.6)
+			end
+
 			GameTooltip:Show()
 		end)
 
@@ -160,28 +200,45 @@ local function FlightFrame_Show()
 
 		FlightFrame:SetScript("OnUpdate", function(self, elapsed)
 			local now = GetTime()
-			if now <= endTime then
-				local t = endTime - now
+
+			if endTime == nil then
+				local t = now - startTime
 				self.time:SetText(getFormattedTime(t))
-			else
-				self.time:SetText('0s')
+			else 
+				local t = endTime - now
+				if t >= 0 then
+					self.time:SetText(getFormattedTime(t))
+				else
+					self.time:SetText('+' .. getFormattedTime((t-1) * -1))
+				end
 			end
 		end)
 
 		FlightFrame.time = FlightFrame:CreateFontString(nil, "BACKGROUND", "GameFontHighlight")
 		FlightFrame.time:SetPoint("CENTER", FlightFrame, "CENTER")
-
-		FlightFrame:Show()
 	end
-
-	local t = defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
-	FlightFrame.time:SetText(getFormattedTime(t))
+	
+	FlightFrame.time:SetText("")
+	FlightFrame:Show()
 end
 local function FlightFrame_Hide()
 	if FlightFrame ~= nil then
 		FlightFrame:Hide()
 	end
 end
+
+
+--[[
+Addon
+--]]
+
+local Addon = CreateFrame("Frame", "FlightTimerClassic", UIParent)
+
+Addon:UnregisterAllEvents()
+Addon:RegisterEvent("PLAYER_LOGIN")
+Addon:SetScript("OnEvent", function(self, event, ...)
+	return self[event] and self[event](self, ...)
+end)
 
 function Addon:PLAYER_LOGIN()  
 	local faction = UnitFactionGroup("player")
@@ -190,47 +247,44 @@ function Addon:PLAYER_LOGIN()
 
 	if FTCData[faction] ~= nil then
 		defaultTimes = FTCData[faction]
+		customTimes = FTCCustomData[faction]
 		
 		self:RegisterEvent("PLAYER_CONTROL_GAINED")
 		self:RegisterEvent("TAXIMAP_OPENED")
 		
-		consoleLog(faction .. ' Flightpaths loaded.')
-		print()
+		consoleLog(faction .. ' flightpaths loaded.')
 	else
-		consoleLog("No flight data found for" .. faction .. '.')
+		consoleLog("No flightpaths found for " .. faction .. '.')
 	end
-
-	
-	local function FTCCommands(msg, editbox)
-		if msg == 'debug' then
-			showDebug = not showDebug
-
-			if showDebug then
-				consoleLog('Debug enabled. Type /ftc debug again to disable.')
-			else
-				consoleLog('Debug disabled. Type /ftc debug again to enable.')
-			end
-		elseif msg == 'help' then
-			consoleLog('/ftc debug – Enable/disable debug output.')
-			consoleLog('/ftc help – Show this help text.')
-		else
-			consoleLog('unkown command. Type /ftc help to see all commands.')
-		end
-	end
-	
-	SLASH_FLIGHTIMERCLASSIC1, SLASH_FLIGHTIMERCLASSIC2 = '/ftc', '/flighttimerclassic'
-	
-	SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
---
 end
 
 function Addon:PLAYER_CONTROL_GAINED()
-	--print("PLAYER_CONTROL_GAINED")
+	--consoleLog("PLAYER_CONTROL_GAINED")
 	FlightFrame_Hide()
+
+	-- always save the recorded time
+	if startTime then
+		local now = GetTime()
+		local t = ceil(now - startTime)
+		local flightInfo = "|cffcceeff" .. currentName .. "|cff66ddff to |cffcceeff" .. endName .. "|cff66ddff took |cffcceeff" .. getFormattedTime(t);
+		
+		if endTime == nil then
+			consoleLog("New data: " .. flightInfo .. "|cff66ddff.")
+		elseif estimatedT ~= t then
+			consoleLog("Correction: " .. flightInfo .. "|cff66ddff (was |cffcceeff" .. getFormattedTime(estimatedT) .. "|cff66ddff).")
+		else
+			consoleLog("Arrived at |cffcceeff" .. endName .. "|cff66ddff after |cffcceeff" .. getFormattedTime(t) .. "|cff66ddff.")
+		end
+
+		customTimes[currentHash] = customTimes[currentHash] or {}
+		customTimes[currentHash][endHash] = t
+	end
+
+	
 end
 
 function Addon:TAXIMAP_OPENED()
-	--print("TAXIMAP_OPENED")
+	--consoleLog("TAXIMAP_OPENED")
 
 	local nodesInfo = "name;x;y"
 
@@ -252,47 +306,54 @@ function Addon:TAXIMAP_OPENED()
 	end
 end
 
+
+--[[
+Hooks
+--]]
+
 hooksecurefunc("TaxiNodeOnButtonEnter", function(button)
 
 	local i = button:GetID()
-	local name, hash = getTaxiNodeInfo(i)
+	local nodeType = TaxiNodeGetType(i)
 
-	local t = defaultTimes[currentHash] and defaultTimes[currentHash][hash]
+	if nodeType ~= "CURRENT" then
+		local name, hash = getTaxiNodeInfo(i)
+		local t = customTimes[currentHash] and customTimes[currentHash][hash] or defaultTimes[currentHash] and defaultTimes[currentHash][hash]
 
-	if t then
-		GameTooltip:AddDoubleLine(L.EstimatedTime, getFormattedTime(t), 1, 0.82, 0, 1, 1, 1)
-	else
-		GameTooltip:AddDoubleLine(L.EstimatedTime, UNKNOWN, 1, 0.82, 0, 0.6, 0.6, 0.6)
+		if t then
+			GameTooltip:AddDoubleLine(L.EstimatedTime, getFormattedTime(t), 1, 0.82, 0, 1, 1, 1)
+		else
+			GameTooltip:AddDoubleLine(L.EstimatedTime, UNKNOWN, 1, 0.82, 0, 0.6, 0.6, 0.6)
+		end
+
+		GameTooltip:Show()
 	end
-
-	GameTooltip:Show()
 
 end)
 
 hooksecurefunc("TakeTaxiNode", function(i)
-	--print("TakeTaxiNode", i)
+	--consoleLog("TakeTaxiNode", i)
 	endName, endHash = getTaxiNodeInfo(i)
 	
-	local now = GetTime()
-	local t = defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
+	startTime = GetTime()
+	estimatedT = customTimes[currentHash] and customTimes[currentHash][endHash] or defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
 
-	startTime = now
-
-	if t == nil then
+	if estimatedT == nil then
 		endTime = nil
-	else
-		endTime = startTime + t
+		consoleLog("Unknown flightpath. Measuring duration from |cffcceeff" .. currentName .. "|cff66ddff to |cffcceeff" .. endName .. "|cff66ddff.")
+	else	
+		endTime = startTime + estimatedT
 	end
 
 	FlightFrame_Show()
 end)
 
 hooksecurefunc("AcceptBattlefieldPort", function(index, accept) 
-	--print("AcceptBattlefieldPort")
+	--consoleLog("AcceptBattlefieldPort")
 	FlightFrame_Hide()
 end)
 
 hooksecurefunc(C_SummonInfo, "ConfirmSummon", function()
-	print("|cffff8080Summon|cff208080, porttaken -|r")
+	consoleLog("ConfirmSummon")
 	FlightFrame_Hide()
 end)
