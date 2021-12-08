@@ -2,16 +2,19 @@
 	Flight Timer Classic by Nomana-Kingsfall
 	CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/)
 	Huge credit to PhanxFlightTimer, InFlight and Consequence-Flightmaster
-	which helped me to put together FTC as my first addon
+	from which I more or less frankensteined this AddOn together.
 	https://github.com/phanx-wow/PhanxFlightTimer
 	https://www.curseforge.com/wow/addons/inflight-taxi-timer
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
 ----------------------------------------------------------------------]]
 
 FTCCustomData = { Alliance = {}, Horde = {} }
+FTCConfig = {
+	debug = false,
+	mute = false
+}
 
 local currentName, currentHash, startTime, endName, endHash, endTime, estimatedT
-local showDebug = false
 local defaultTimes = {}
 local customTimes = {}
 
@@ -60,8 +63,10 @@ local function getTaxiNodeInfo(i)
 	return name, getTaxiNodeHash(i)
 end
 
-local function consoleLog(text)
-	print(format("|cff00ccff[FlightTimerClassic]|cff66ddff %s", text))
+local function consoleLog(text, important)
+	if important or not FTCConfig.mute then
+		print(format("|cff00ccff[FlightTimerClassic]|cff66ddff %s", text))
+	end
 end
 
 local function getFormattedTime(t)
@@ -75,32 +80,6 @@ local function getFormattedTime(t)
 		return UNKNOWN
 	end
 end
-
-
---[[
-Slash Commands
---]]
-
-local function FTCCommands(msg, editbox)
-	if msg == 'debug' then
-		showDebug = not showDebug
-
-		if showDebug then
-			consoleLog('Debug enabled. Type |cffcceeff/ftc debug |cff66ddffagain to disable.')
-		else
-			consoleLog('Debug disabled. Type |cffcceeff/ftc debug |cff66ddffagain to enable.')
-		end
-	elseif msg == 'help' then
-		consoleLog('|cffcceeff/ftc debug |cff66ddff– Enable/disable debug output.')
-		consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help text.')
-	else
-		consoleLog('unkown command. Type |cffcceeff/ftc help |cff66ddffto see all commands.')
-	end
-end
-
-SLASH_FLIGHTIMERCLASSIC1 = '/ftc'
-
-SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
 
 
 --[[
@@ -164,12 +143,13 @@ local FlightFrame
 local function FlightFrame_Show()
 
 	if not FlightFrame then
-		FlightFrame = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+		FlightFrame = CreateFrame("Frame", "FlightTimerClassicUI", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
 		FlightFrame:EnableMouse(true)
 		FlightFrame:SetMovable(true)
 		FlightFrame:SetWidth(120)
 		FlightFrame:SetHeight(48)
 		FlightFrame:SetPoint("CENTER", 0, 0);
+		FlightFrame:SetUserPlaced(true)
 
 		FlightFrame:SetBackdrop({
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -184,8 +164,8 @@ local function FlightFrame_Show()
 		FlightFrame:SetScript("OnEnter", function(self)
 			GameTooltip:SetOwner(self, "ANCHOR_BOTTOM", 0, 0)
 			GameTooltip:SetText("Flight Timer Classic")
-			GameTooltip:AddDoubleLine(L.FlyingFrom, currentName, 1, 0.82, 0, 1, 1, 1)
-			GameTooltip:AddDoubleLine(L.FlyingTo, endName, 1, 0.82, 0, 1, 1, 1)
+			GameTooltip:AddDoubleLine(L.FlyingFrom, currentName or UNKNOWN, 1, 0.82, 0, 1, 1, 1)
+			GameTooltip:AddDoubleLine(L.FlyingTo, endName or UNKNOWN, 1, 0.82, 0, 1, 1, 1)
 			
 			if estimatedT then
 				GameTooltip:AddDoubleLine(L.EstimatedTime, getFormattedTime(estimatedT), 1, 0.82, 0, 1, 1, 1)
@@ -201,9 +181,12 @@ local function FlightFrame_Show()
 		FlightFrame:SetScript("OnUpdate", function(self, elapsed)
 			local now = GetTime()
 
+			-- endTime unknown, show count up
 			if endTime == nil then
 				local t = now - startTime
 				self.time:SetText(getFormattedTime(t))
+
+			-- endTime known, show count down
 			else 
 				local t = endTime - now
 				if t >= 0 then
@@ -218,7 +201,7 @@ local function FlightFrame_Show()
 		FlightFrame.time:SetPoint("CENTER", FlightFrame, "CENTER")
 	end
 	
-	FlightFrame.time:SetText("")
+	FlightFrame.time:SetText(UNKNOWN)
 	FlightFrame:Show()
 end
 local function FlightFrame_Hide()
@@ -226,6 +209,75 @@ local function FlightFrame_Hide()
 		FlightFrame:Hide()
 	end
 end
+
+local function CancelFlight() 
+	consoleLog("Flight cancelled.")
+	-- reset starTime, so nothing will be logged upon PLAYER_CONTROL_GAINED
+	startTime = nil
+	FlightFrame_Hide()
+end
+
+
+--[[
+Slash Commands
+--]]
+
+local function FTCCommands(msg, editbox)
+
+	local cmds = {
+		debug = function()
+			FTCConfig.debug = not FTCConfig.debug
+
+			if FTCConfig.debug then
+				consoleLog('Debug enabled. Type |cffcceeff/ftc debug |cff66ddffagain to disable.', true)
+			else
+				consoleLog('Debug disabled. Type |cffcceeff/ftc debug |cff66ddffagain to enable.', true)
+			end
+		end,
+		mute = function()
+			FTCConfig.mute = not FTCConfig.mute
+
+			if FTCConfig.mute then
+				consoleLog('Disabled info messages. Type |cffcceeff/ftc mute |cff66ddffagain to unmute.', true)
+			else
+				consoleLog('Enabled info messages. Type |cffcceeff/ftc mute |cff66ddffagain to mute.', true)
+			end
+		end,
+		show = function()
+			-- show some fake up counting
+			if startTime == nil then
+				startTime = GetTime()
+			end
+			if FlightFrame == nil or not FlightFrame:IsShown() then
+				FlightFrame_Show()
+				consoleLog('Revealed FTC UI for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide it again.', true)
+			else 
+				consoleLog('FTC UI should already be visible.', true)
+			end
+		end,
+		hide = function()
+			FlightFrame_Hide()
+			consoleLog('Hiding FTC UI.', true)
+		end,
+		help = function()
+			consoleLog('|cffcceeff/ftc show |cff66ddff– Show the FTC UI for positioning.', true)
+			consoleLog('|cffcceeff/ftc hide |cff66ddff– Hide the FTC UI.', true)
+			consoleLog('|cffcceeff/ftc debug |cff66ddff– Enable/disable debug output.', true)
+			consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help text.', true)
+		end
+	}
+
+	local func = cmds[msg]
+	if(func) then
+		func()
+	else
+		consoleLog(format('unkown command: |cffcceeff%q', msg))
+		cmds.help()
+	end
+end
+
+SLASH_FLIGHTIMERCLASSIC1 = '/ftc'
+SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
 
 
 --[[
@@ -259,7 +311,11 @@ function Addon:PLAYER_LOGIN()
 end
 
 function Addon:PLAYER_CONTROL_GAINED()
-	--consoleLog("PLAYER_CONTROL_GAINED")
+	
+	if FTCConfig.debug then
+		consoleLog("PLAYER_CONTROL_GAINED")
+	end
+	
 	FlightFrame_Hide()
 
 	-- always save the recorded time
@@ -280,6 +336,14 @@ function Addon:PLAYER_CONTROL_GAINED()
 		customTimes[currentHash][endHash] = t
 	end
 
+	-- reset
+	currentName = nil
+	currentHash = nil
+	startTime = nil
+	endName = nil
+	endHash = nil
+	endTime = nil
+	estimatedT = nil
 	
 end
 
@@ -301,7 +365,7 @@ function Addon:TAXIMAP_OPENED()
 		nodesInfo = nodesInfo .. "\n" .. name .. ";" .. x .. ";" .. y
 	end
 
-	if showDebug then
+	if FTCConfig.debug then
 		CopyFrame_Show(nodesInfo)
 	end
 end
@@ -349,11 +413,17 @@ hooksecurefunc("TakeTaxiNode", function(i)
 end)
 
 hooksecurefunc("AcceptBattlefieldPort", function(index, accept) 
-	--consoleLog("AcceptBattlefieldPort")
-	FlightFrame_Hide()
+	if FTCConfig.debug then
+		consoleLog("AcceptBattlefieldPort")
+	end
+
+	CancelFlight()
 end)
 
 hooksecurefunc(C_SummonInfo, "ConfirmSummon", function()
-	consoleLog("ConfirmSummon")
-	FlightFrame_Hide()
+	if FTCConfig.debug then
+		consoleLog("ConfirmSummon")
+	end
+
+	CancelFlight()
 end)
