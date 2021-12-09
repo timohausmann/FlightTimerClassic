@@ -3,7 +3,7 @@
 ## Title: Flight Timer Classic
 ## Notes: Record and display flight durations for Classic WoW.
 ## Author: Nomana
-## Version: 0.4
+## Version: 0.5
 ## SavedVariables: FTCCustomData, FTCConfig
 FlightTimerClassic.lua
 Data.lua

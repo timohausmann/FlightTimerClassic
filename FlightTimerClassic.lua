@@ -17,6 +17,7 @@ FTCConfig = {
 local currentName, currentHash, startTime, endName, endHash, endTime, estimatedT
 local defaultTimes = {}
 local customTimes = {}
+local flightStarted = false
 
 
 --[[
@@ -58,9 +59,8 @@ local function getTaxiNodeHash(i)
 	return tostring(floor(x * 100000000))
 end
 
-local function getTaxiNodeInfo(i)
-	local name = strmatch(TaxiNodeName(i), "[^,]+")
-	return name, getTaxiNodeHash(i)
+local function getTaxiNodeName(i)
+	return strmatch(TaxiNodeName(i), "[^,]+")
 end
 
 local function consoleLog(text, important)
@@ -139,17 +139,20 @@ end
 FlightFrame
 --]]
 
-local FlightFrame
+local flightFrameLoaded = false
+local FlightFrame = CreateFrame("Frame", "FlightTimerClassic", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
+FlightFrame:EnableMouse(true)
+FlightFrame:SetMovable(true)
+FlightFrame:SetWidth(120)
+FlightFrame:SetHeight(48)
+FlightFrame:SetPoint("CENTER", 0, 0);
+FlightFrame:Hide()
+
 local function FlightFrame_Show()
 
-	if not FlightFrame then
-		FlightFrame = CreateFrame("Frame", "FlightTimerClassicUI", UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-		FlightFrame:EnableMouse(true)
-		FlightFrame:SetMovable(true)
-		FlightFrame:SetWidth(120)
-		FlightFrame:SetHeight(48)
-		FlightFrame:SetPoint("CENTER", 0, 0);
-		FlightFrame:SetUserPlaced(true)
+	if not flightFrameLoaded then
+		
+		flightFrameLoaded = true
 
 		FlightFrame:SetBackdrop({
 			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
@@ -188,7 +191,7 @@ local function FlightFrame_Show()
 
 			-- endTime known, show count down
 			else 
-				local t = endTime - now
+				local t = ceil(endTime - now)
 				if t >= 0 then
 					self.time:SetText(getFormattedTime(t))
 				else
@@ -204,18 +207,19 @@ local function FlightFrame_Show()
 	FlightFrame.time:SetText(UNKNOWN)
 	FlightFrame:Show()
 end
-local function FlightFrame_Hide()
-	if FlightFrame ~= nil then
-		FlightFrame:Hide()
-	end
-end
 
 local function CancelFlight() 
-	consoleLog("Flight cancelled.")
-	-- reset starTime, so nothing will be logged upon PLAYER_CONTROL_GAINED
+	consoleLog("Flight cancelled.")	
+	-- reset startTime, so nothing will be logged upon PLAYER_CONTROL_GAINED
 	startTime = nil
-	FlightFrame_Hide()
+	FlightFrame:Hide()
 end
+
+FlightFrame:UnregisterAllEvents()
+FlightFrame:RegisterEvent("PLAYER_LOGIN")
+FlightFrame:SetScript("OnEvent", function(self, event, ...)
+	return self[event] and self[event](self, ...)
+end)
 
 
 --[[
@@ -250,13 +254,13 @@ local function FTCCommands(msg, editbox)
 			end
 			if FlightFrame == nil or not FlightFrame:IsShown() then
 				FlightFrame_Show()
-				consoleLog('Revealed FTC UI for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide it again.', true)
+				consoleLog('Revealed FTC UI for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide.', true)
 			else 
 				consoleLog('FTC UI should already be visible.', true)
 			end
 		end,
 		hide = function()
-			FlightFrame_Hide()
+			FlightFrame:Hide()
 			consoleLog('Hiding FTC UI.', true)
 		end,
 		help = function()
@@ -281,21 +285,11 @@ SlashCmdList["FLIGHTIMERCLASSIC"] = FTCCommands
 
 
 --[[
-Addon
+PLAYER_LOGIN
 --]]
 
-local Addon = CreateFrame("Frame", "FlightTimerClassic", UIParent)
-
-Addon:UnregisterAllEvents()
-Addon:RegisterEvent("PLAYER_LOGIN")
-Addon:SetScript("OnEvent", function(self, event, ...)
-	return self[event] and self[event](self, ...)
-end)
-
-function Addon:PLAYER_LOGIN()  
+function FlightFrame:PLAYER_LOGIN()  
 	local faction = UnitFactionGroup("player")
-	
-	--FlightFrame_Show()
 
 	if FTCData[faction] ~= nil then
 		defaultTimes = FTCData[faction]
@@ -304,19 +298,24 @@ function Addon:PLAYER_LOGIN()
 		self:RegisterEvent("PLAYER_CONTROL_GAINED")
 		self:RegisterEvent("TAXIMAP_OPENED")
 		
-		consoleLog(faction .. ' flightpaths loaded.')
+		consoleLog("|cffcceeff" .. faction .. " |cff66ddffflightpaths loaded.")
 	else
-		consoleLog("No flightpaths found for " .. faction .. '.')
+		consoleLog("There are currently no flight durations included for |cffcceeff" .. faction .. '|cff66ddff. Hit me up on Discord if you want to help out.')
 	end
 end
 
-function Addon:PLAYER_CONTROL_GAINED()
+
+--[[
+PLAYER_CONTROL_GAINED
+--]]
+
+function FlightFrame:PLAYER_CONTROL_GAINED()
 	
 	if FTCConfig.debug then
 		consoleLog("PLAYER_CONTROL_GAINED")
 	end
 	
-	FlightFrame_Hide()
+	FlightFrame:Hide()
 
 	-- always save the recorded time
 	if startTime then
@@ -337,6 +336,7 @@ function Addon:PLAYER_CONTROL_GAINED()
 	end
 
 	-- reset
+	flightStarted = false
 	currentName = nil
 	currentHash = nil
 	startTime = nil
@@ -347,32 +347,39 @@ function Addon:PLAYER_CONTROL_GAINED()
 	
 end
 
-function Addon:TAXIMAP_OPENED()
-	--consoleLog("TAXIMAP_OPENED")
 
-	local nodesInfo = "name;x;y"
+--[[
+TAXIMAP_OPENED
+--]]
+
+function FlightFrame:TAXIMAP_OPENED()
 
 	for i = 1, NumTaxiNodes() do
 		
 		local nodeType = TaxiNodeGetType(i)
-		local name, hash = getTaxiNodeInfo(i)
-		local x, y = TaxiNodePosition(i)
+		local name = getTaxiNodeName(i)
+		local hash = getTaxiNodeHash(i)
 
 		if nodeType == "CURRENT" then
 			currentName, currentHash = name, hash
 		end
-
-		nodesInfo = nodesInfo .. "\n" .. name .. ";" .. x .. ";" .. y
 	end
 
 	if FTCConfig.debug then
+		local nodesInfo = "name;hash;x;y"
+		for i = 1, NumTaxiNodes() do
+			local name = getTaxiNodeName(i)
+			local hash = getTaxiNodeHash(i)
+			local x, y = TaxiNodePosition(i)
+			nodesInfo = nodesInfo .. "\n" .. name .. ";" .. hash .. ";" .. x .. ";" .. y
+		end
 		CopyFrame_Show(nodesInfo)
 	end
 end
 
 
 --[[
-Hooks
+TaxiNodeOnButtonEnter
 --]]
 
 hooksecurefunc("TaxiNodeOnButtonEnter", function(button)
@@ -381,7 +388,7 @@ hooksecurefunc("TaxiNodeOnButtonEnter", function(button)
 	local nodeType = TaxiNodeGetType(i)
 
 	if nodeType ~= "CURRENT" then
-		local name, hash = getTaxiNodeInfo(i)
+		local hash = getTaxiNodeHash(i)
 		local t = customTimes[currentHash] and customTimes[currentHash][hash] or defaultTimes[currentHash] and defaultTimes[currentHash][hash]
 
 		if t then
@@ -395,10 +402,16 @@ hooksecurefunc("TaxiNodeOnButtonEnter", function(button)
 
 end)
 
+
+--[[
+TakeTaxiNode
+--]]
+
 hooksecurefunc("TakeTaxiNode", function(i)
-	--consoleLog("TakeTaxiNode", i)
-	endName, endHash = getTaxiNodeInfo(i)
-	
+
+	flightStarted = true
+	endName = getTaxiNodeName(i)
+	endHash = getTaxiNodeHash(i)
 	startTime = GetTime()
 	estimatedT = customTimes[currentHash] and customTimes[currentHash][endHash] or defaultTimes[currentHash] and defaultTimes[currentHash][endHash]
 
@@ -412,18 +425,47 @@ hooksecurefunc("TakeTaxiNode", function(i)
 	FlightFrame_Show()
 end)
 
+
+--[[
+AcceptBattlefieldPort
+--]]
+
 hooksecurefunc("AcceptBattlefieldPort", function(index, accept) 
 	if FTCConfig.debug then
 		consoleLog("AcceptBattlefieldPort")
 	end
 
-	CancelFlight()
+	if flightStarted then
+		CancelFlight()
+	end
 end)
+
+
+--[[
+ConfirmSummon
+--]]
 
 hooksecurefunc(C_SummonInfo, "ConfirmSummon", function()
 	if FTCConfig.debug then
 		consoleLog("ConfirmSummon")
 	end
 
-	CancelFlight()
+	if flightStarted then
+		CancelFlight()
+	end
+end)
+
+
+--[[
+TaxiRequestEarlyLanding
+--]]
+
+hooksecurefunc("TaxiRequestEarlyLanding", function()
+	if FTCConfig.debug then
+		consoleLog("TaxiRequestEarlyLanding")
+	end
+
+	if flightStarted then
+		CancelFlight()
+	end
 end)
