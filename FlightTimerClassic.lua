@@ -326,7 +326,7 @@ function Addon:PLAYER_CONTROL_GAINED()
 		
 		if endTime == nil then
 			consoleLog("New data: " .. flightInfo .. "|cff66ddff.")
-		elseif estimatedT ~= t then
+		elseif abs(t - estimatedT) > 2 then -- allow 2 seconds error margin before nagging around
 			consoleLog("Correction: " .. flightInfo .. "|cff66ddff (was |cffcceeff" .. getFormattedTime(estimatedT) .. "|cff66ddff).")
 		else
 			consoleLog("Arrived at |cffcceeff" .. endName .. "|cff66ddff after |cffcceeff" .. getFormattedTime(t) .. "|cff66ddff.")
