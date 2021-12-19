@@ -6,6 +6,10 @@
 	https://github.com/phanx-wow/PhanxFlightTimer
 	https://www.curseforge.com/wow/addons/inflight-taxi-timer
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
+
+	@TODO
+	* Add Horde Data
+	* Bugfix: Not enough money to fly starts timer nevertheless
 ----------------------------------------------------------------------]]
 
 FTCCustomData = { Alliance = {}, Horde = {} }
@@ -217,6 +221,8 @@ end
 
 FlightFrame:UnregisterAllEvents()
 FlightFrame:RegisterEvent("PLAYER_LOGIN")
+FlightFrame:RegisterEvent("PLAYER_CONTROL_GAINED")
+FlightFrame:RegisterEvent("TAXIMAP_OPENED")
 FlightFrame:SetScript("OnEvent", function(self, event, ...)
 	return self[event] and self[event](self, ...)
 end)
@@ -291,13 +297,10 @@ PLAYER_LOGIN
 function FlightFrame:PLAYER_LOGIN()  
 	local faction = UnitFactionGroup("player")
 
+	customTimes = FTCCustomData[faction]
+
 	if FTCData[faction] ~= nil then
 		defaultTimes = FTCData[faction]
-		customTimes = FTCCustomData[faction]
-		
-		self:RegisterEvent("PLAYER_CONTROL_GAINED")
-		self:RegisterEvent("TAXIMAP_OPENED")
-		
 		consoleLog("|cffcceeff" .. faction .. " |cff66ddffflightpaths loaded.")
 	else
 		consoleLog("There are currently no flight durations included for |cffcceeff" .. faction .. '|cff66ddff. Hit me up on Discord if you want to help out.')
