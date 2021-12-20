@@ -29,7 +29,4 @@ jobs:
       - name: Create new Version in CurseForge
         if: github.event_name != 'pull_request'
         shell: bash
-        env:
-          PROJECTID: ${{ secrets.CURSEFORGE__PROJECTID }}
-          TOKEN: ${{ secrets.CURSEFORGE__TOKEN }}
         run: 'curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''New version from Github'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''alpha'' }" -F file=@${{ github.workspace }}/addon.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"' 
