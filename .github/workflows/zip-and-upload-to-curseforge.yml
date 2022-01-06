@@ -1,11 +1,8 @@
 name: Upload to CurseForge
 on:
   push:
-    branches:
-      - master
-  pull_request:
-    branches:
-      - master
+    tags:
+      - '*.*.*'
   workflow_dispatch:
 jobs:
   Zip-And-Upload-Addon-ZIP:  
@@ -13,20 +10,25 @@ jobs:
     steps:
       - name: Check out repository code
         uses: actions/checkout@v2
-      - name: Zip files into addon.zip
+      - name: Set version tag env
+        run: echo "RELEASE_VERSION=${GITHUB_REF#refs/*/}" >> $GITHUB_ENV
+      - name: Echo version env
+        run: |
+          echo $RELEASE_VERSION
+          echo ${{ env.RELEASE_VERSION }}
+      - name: Zip files
         uses: papeloto/action-zip@v1
         with:
           files: Data.lua FlightTimerClassic.lua FlightTimerClassic.toc
-          dest: addon.zip
+          dest: FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v1
         with:
           name: FlightTimerClassic
-          path: ${{ github.workspace }}/addon.zip
+          path: ${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip
       - name: Echo Create new Version in CurseForge
         shell: bash
-        run: 'echo curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''New version from Github'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/addon.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"'
+        run: 'echo curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"'
       - name: Create new Version in CurseForge
-        if: github.event_name != 'pull_request'
         shell: bash
-        run: 'curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''New version from Github'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/addon.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"' 
+        run: 'curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"' 
