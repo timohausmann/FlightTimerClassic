@@ -16,10 +16,14 @@ jobs:
         run: |
           echo $RELEASE_VERSION
           echo ${{ env.RELEASE_VERSION }}
+      - name: Create addon folder
+        run: |
+          mkdir FlightTimerClassic
+          mv Data.lua FlightTimerClassic.lua FlightTimerClassic.toc ./FlightTimerClassic
       - name: Zip files
         uses: vimtor/action-zip@v1
         with:
-          files: Data.lua FlightTimerClassic.lua FlightTimerClassic.toc
+          files: FlightTimerClassic/
           dest: FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip
       - name: Upload Artifact
         uses: actions/upload-artifact@v1
