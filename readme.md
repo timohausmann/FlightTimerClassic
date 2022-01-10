@@ -5,10 +5,10 @@ Record and display flight durations for Classic WoW.
 <a href="./screenshots/flightmap.jpg">
     <img src="./screenshots/flightmap.jpg" alt="Flightmap" width="200" />
 </a>
-<a href="./screenshots/flightmap.jpg">
+<a href="./screenshots/inflight.jpg">
     <img src="./screenshots/inflight.jpg" alt="Inflight" width="200" />
 </a>
-<a href="./screenshots/flightmap.jpg">
+<a href="./screenshots/chatinfo.jpg">
     <img src="./screenshots/chatinfo.png" alt="Chatinfo" width="200" />
 </a>
 
