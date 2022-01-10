@@ -2,7 +2,7 @@ const fs = require('fs');
 const { getName } = require('./taxinodes');
 const parseLua = require('./parseLua');
 
-module.exports = () => fs.readdirSync('../data')
+module.exports = () => fs.readdirSync('./data')
     .filter(file => file.endsWith('.lua'))
     .map(file => ({ file, doc: parseLua(fs.readFileSync(`./data/${(file)}`, 'utf8')) }))
     .map(({ file, doc }) => {
