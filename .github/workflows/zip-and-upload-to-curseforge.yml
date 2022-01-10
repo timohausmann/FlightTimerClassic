@@ -28,7 +28,7 @@ jobs:
           path: ${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip
       - name: Echo Create new Version in CurseForge
         shell: bash
-        run: 'echo curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"'
+        run: 'echo curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"'
       - name: Create new Version in CurseForge
         shell: bash
-        run: 'curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''displayName'': ''Flight Timer Classic'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"' 
+        run: 'curl -v -H "X-Api-Token: ${{ secrets.CURSEFORGE__TOKEN }}" -F "metadata={ ''changelog'': ''See GitHub'', ''gameVersions'': [8722], ''releaseType'': ''beta'' }" -F file=@${{ github.workspace }}/FlightTimerClassic-${{ env.RELEASE_VERSION }}.zip "https://wow.curseforge.com/api/projects/${{ secrets.CURSEFORGE__PROJECTID }}/upload-file"' 
