@@ -6,6 +6,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.6.1] - 2023-08-27
+### Changed
+- Bumped Interface Version
+- Changed beta to release
+
 ## [0.6.0] - 2022-01-10
 ### Added
 - Horde Data (thanks to Nezzie-Shadowstrike)

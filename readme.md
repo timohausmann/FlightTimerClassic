@@ -1,4 +1,4 @@
-# Classic Flight Timer
+# Flight Timer Classic
 
 Record and display flight durations for Classic WoW.
 
@@ -25,5 +25,10 @@ Huge credit to [PhanxFlightTimer](https://github.com/phanx-wow/PhanxFlightTimer)
 [Consequence-Flightmaster](https://www.curseforge.com/wow/addons/consequence-flightmaster)
 from which I more or less frankensteined this AddOn together.
 
-License: CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/)
+----
+
+* License: [CC BY 2.0](https://creativecommons.org/licenses/by/2.0/)
+* [Flight Timer Classic at CurseForge](https://www.curseforge.com/wow/addons/flight-timer-classic)
+* [Flight Timer Classic at GitHub](https://github.com/timohausmann/FlightTimerClassic) 
+
     

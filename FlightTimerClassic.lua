@@ -1,6 +1,9 @@
 --[[--------------------------------------------------------------------
 	Flight Timer Classic by Nomana-Kingsfall
 	CC BY 2.0 (https://creativecommons.org/licenses/by/2.0/)
+    https://www.curseforge.com/wow/addons/flight-timer-classic
+    https://github.com/timohausmann/FlightTimerClassic
+
 	Huge credit to PhanxFlightTimer, InFlight and Consequence-Flightmaster
 	from which I more or less frankensteined this AddOn together.
 	https://github.com/phanx-wow/PhanxFlightTimer
@@ -8,7 +11,6 @@
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
 
 	@TODO
-	* Add Horde Data
 	* Bugfix: Not enough money to fly starts timer nevertheless
 ----------------------------------------------------------------------]]
 

@@ -1,9 +1,9 @@
-## Interface: 11401
+## Interface: 11404
 
 ## Title: Flight Timer Classic
 ## Notes: Record and display flight durations for Classic WoW.
 ## Author: Nomana
-## Version: 0.6.0
+## Version: 0.6.1
 ## SavedVariables: FTCCustomData, FTCConfig
 FlightTimerClassic.lua
 Data.lua
