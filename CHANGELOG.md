@@ -5,6 +5,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
+### Changed
+- Targets the WoW Forever interface (16001) and looks flights up by node ID.
+- Estimated flight times are displayed in gray.
+- Measured times are displayed in white.
 
 ## [0.6.1] - 2023-08-27
 ### Changed
