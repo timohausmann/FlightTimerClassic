@@ -19,6 +19,8 @@ local customTimes = {}
 local flightStarted = false
 -- Set on click. The clock stays off until the character is actually on the taxi.
 local pendingSince
+-- True after UnitOnTaxi has been seen during this flight. Landing clears it.
+local confirmedTaxi
 -- A refused takeoff (not enough money) never leaves the ground. Give up after this.
 local TAKEOFF_WAIT = 5
 local mapHooked = false
@@ -188,6 +190,7 @@ end
 -- Drop a click that never took off. Keep the flight master node; the map is still open.
 local function AbortTakeoff()
 	pendingSince = nil
+	confirmedTaxi = nil
 	startTime = nil
 	endName = nil
 	endId = nil
@@ -196,6 +199,46 @@ local function AbortTakeoff()
 	timeIsEstimate = nil
 	flightStarted = false
 	FlightFrame:Hide()
+end
+
+local function ResetFlight()
+	flightStarted = false
+	pendingSince = nil
+	confirmedTaxi = nil
+	currentName = nil
+	currentId = nil
+	startTime = nil
+	endName = nil
+	endId = nil
+	endTime = nil
+	estimatedT = nil
+	timeIsEstimate = nil
+	FlightFrame:Hide()
+end
+
+-- Save the flight and hide the box. Safe to call twice.
+local function FinishFlight()
+	if not startTime then
+		return
+	end
+	local t = ceil(GetTime() - startTime)
+	local flightInfo = "|cffcceeff" .. (currentName or UNKNOWN) .. "|cff66ddff to |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff took |cffcceeff" .. getFormattedTime(t)
+
+	if endTime == nil then
+		consoleLog("New data: " .. flightInfo .. "|cff66ddff.")
+	elseif abs(t - estimatedT) > 2 then -- allow 2 seconds error margin before nagging around
+		consoleLog("Correction: " .. flightInfo .. "|cff66ddff (was |cffcceeff" .. getFormattedTime(estimatedT) .. "|cff66ddff).")
+	else
+		consoleLog("Arrived at |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff after |cffcceeff" .. getFormattedTime(t) .. "|cff66ddff.")
+	end
+
+	-- Numeric node ids. Old Alliance / Horde hash keys are left in place.
+	if currentId and endId and t > 0 then
+		customTimes[currentId] = customTimes[currentId] or {}
+		customTimes[currentId][endId] = t
+	end
+
+	ResetFlight()
 end
 
 local function FlightFrame_Show()
@@ -240,6 +283,15 @@ local function FlightFrame_Show()
 					self.time:SetText(UNKNOWN)
 					return
 				end
+			end
+
+			-- The landing event can run while the taxi flag is still set, and it does not fire again.
+			local onTaxi = OnTaxi()
+			if onTaxi == true then
+				confirmedTaxi = true
+			elseif onTaxi == false and confirmedTaxi then
+				FinishFlight()
+				return
 			end
 
 			local now = GetTime()
@@ -721,51 +773,22 @@ function FlightFrame:PLAYER_CONTROL_GAINED()
 		consoleLog("PLAYER_CONTROL_GAINED")
 	end
 
-	-- A zone change can fire this while the taxi is still going. Wait for the real landing.
-	if OnTaxi() then
+	-- Still in the air. OnUpdate stops the clock once the taxi flag drops.
+	if startTime and OnTaxi() then
+		return
+	end
+
+	if startTime then
+		FinishFlight()
 		return
 	end
 
 	-- Clicked, not airborne yet. OnUpdate gives the takeoff a few seconds.
-	if pendingSince and not startTime then
+	if pendingSince then
 		return
 	end
 
-	FlightFrame:Hide()
-
-	-- always save the recorded time
-	if startTime then
-		local now = GetTime()
-		local t = ceil(now - startTime)
-		local flightInfo = "|cffcceeff" .. (currentName or UNKNOWN) .. "|cff66ddff to |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff took |cffcceeff" .. getFormattedTime(t);
-		
-		if endTime == nil then
-			consoleLog("New data: " .. flightInfo .. "|cff66ddff.")
-		elseif abs(t - estimatedT) > 2 then -- allow 2 seconds error margin before nagging around
-			consoleLog("Correction: " .. flightInfo .. "|cff66ddff (was |cffcceeff" .. getFormattedTime(estimatedT) .. "|cff66ddff).")
-		else
-			consoleLog("Arrived at |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff after |cffcceeff" .. getFormattedTime(t) .. "|cff66ddff.")
-		end
-
-		-- Numeric node ids. Old Alliance / Horde hash keys are left in place.
-		if currentId and endId then
-			customTimes[currentId] = customTimes[currentId] or {}
-			customTimes[currentId][endId] = t
-		end
-	end
-
-	-- reset
-	flightStarted = false
-	pendingSince = nil
-	currentName = nil
-	currentId = nil
-	startTime = nil
-	endName = nil
-	endId = nil
-	endTime = nil
-	estimatedT = nil
-	timeIsEstimate = nil
-	
+	ResetFlight()
 end
 
 
