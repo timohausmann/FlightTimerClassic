@@ -11,15 +11,16 @@ local addonName = ...
 	https://github.com/phanx-wow/PhanxFlightTimer
 	https://www.curseforge.com/wow/addons/inflight-taxi-timer
 	https://www.curseforge.com/wow/addons/consequence-flightmaster
-
-	TODOS
-	* Bugfix: Not enough money to fly starts timer nevertheless
 ----------------------------------------------------------------------]]
 
 local currentName, currentId, startTime, endName, endId, endTime, estimatedT, timeIsEstimate
 local defaultTimes = {}
 local customTimes = {}
 local flightStarted = false
+-- Set on click. The clock stays off until the character is actually on the taxi.
+local pendingSince
+-- A refused takeoff (not enough money) never leaves the ground. Give up after this.
+local TAKEOFF_WAIT = 5
 local mapHooked = false
 local taxiShowHooked = false
 local loadHooked = false
@@ -161,6 +162,42 @@ FlightFrame:SetHeight(48)
 FlightFrame:SetPoint("CENTER", 0, 0);
 FlightFrame:Hide()
 
+-- nil when the API cannot answer. Callers must not treat that as "on the ground".
+local function OnTaxi()
+	if type(UnitOnTaxi) ~= "function" then
+		return
+	end
+	local onTaxi = UnitOnTaxi("player")
+	if issecretvalue and issecretvalue(onTaxi) then
+		return
+	end
+	return not not onTaxi
+end
+
+local function BeginFlightClock()
+	if startTime or not pendingSince then
+		return
+	end
+	startTime = GetTime()
+	pendingSince = nil
+	if estimatedT then
+		endTime = startTime + estimatedT
+	end
+end
+
+-- Drop a click that never took off. Keep the flight master node; the map is still open.
+local function AbortTakeoff()
+	pendingSince = nil
+	startTime = nil
+	endName = nil
+	endId = nil
+	endTime = nil
+	estimatedT = nil
+	timeIsEstimate = nil
+	flightStarted = false
+	FlightFrame:Hide()
+end
+
 local function FlightFrame_Show()
 
 	if not flightFrameLoaded then
@@ -191,6 +228,20 @@ local function FlightFrame_Show()
 		FlightFrame:SetScript("OnLeave", GameTooltip_Hide)
 
 		FlightFrame:SetScript("OnUpdate", function(self, elapsed)
+			if not startTime then
+				local onTaxi = pendingSince and OnTaxi()
+				-- false: still on the ground. nil: the API cannot answer, so start anyway.
+				if pendingSince and onTaxi ~= false then
+					BeginFlightClock()
+				elseif pendingSince and GetTime() - pendingSince > TAKEOFF_WAIT then
+					AbortTakeoff()
+					return
+				else
+					self.time:SetText(UNKNOWN)
+					return
+				end
+			end
+
 			local now = GetTime()
 
 			-- endTime unknown, show count up
@@ -217,11 +268,10 @@ local function FlightFrame_Show()
 	FlightFrame:Show()
 end
 
-local function CancelFlight() 
-	consoleLog("Flight cancelled.")	
-	-- reset startTime, so nothing will be logged upon PLAYER_CONTROL_GAINED
-	startTime = nil
-	FlightFrame:Hide()
+local function CancelFlight()
+	consoleLog("Flight cancelled.")
+	-- Nothing to save on landing: the clock is cleared before control returns.
+	AbortTakeoff()
 end
 
 -- The map the player is looking at. GetTaxiMapID stays on the opener's continent.
@@ -316,7 +366,8 @@ local function ResolveTime(srcId, dstId, slot)
 		return
 	end
 	local measured = customTimes[srcId] and customTimes[srcId][dstId]
-	if type(measured) == "number" then
+	-- A saved 0 is a failed click, not a flight. Fall through to the estimate.
+	if type(measured) == "number" and measured > 0 then
 		return measured, false
 	end
 	local ids = RouteNodeIDs(slot, srcId, dstId)
@@ -669,7 +720,17 @@ function FlightFrame:PLAYER_CONTROL_GAINED()
 	if FTCConfig and FTCConfig.debug then
 		consoleLog("PLAYER_CONTROL_GAINED")
 	end
-	
+
+	-- A zone change can fire this while the taxi is still going. Wait for the real landing.
+	if OnTaxi() then
+		return
+	end
+
+	-- Clicked, not airborne yet. OnUpdate gives the takeoff a few seconds.
+	if pendingSince and not startTime then
+		return
+	end
+
 	FlightFrame:Hide()
 
 	-- always save the recorded time
@@ -695,6 +756,7 @@ function FlightFrame:PLAYER_CONTROL_GAINED()
 
 	-- reset
 	flightStarted = false
+	pendingSince = nil
 	currentName = nil
 	currentId = nil
 	startTime = nil
@@ -754,14 +816,14 @@ hooksecurefunc("TakeTaxiNode", function(slot)
 	end
 	endName = ShortName(TaxiNodeName(slot))
 	endId = GetNodeID(slot)
-	startTime = GetTime()
+	-- The clock starts in OnUpdate, once the character is on the taxi.
+	startTime = nil
+	endTime = nil
+	pendingSince = GetTime()
 	estimatedT, timeIsEstimate = ResolveTime(currentId, endId, slot)
 
 	if estimatedT == nil then
-		endTime = nil
 		consoleLog("Unknown flightpath. Measuring duration from |cffcceeff" .. (currentName or UNKNOWN) .. "|cff66ddff to |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff.")
-	else	
-		endTime = startTime + estimatedT
 	end
 
 	FlightFrame_Show()
