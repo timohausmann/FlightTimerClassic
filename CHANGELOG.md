@@ -17,7 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/ftc show` shows a static placeholder time.
 
 ### Fixed
-- Hiding the box before the mount leaves still records the flight. A slow connection has 30 seconds to start the taxi.
+- Hiding the timer box still records the flight, before liftoff and after. Takeoff and landing share one ticker. A slow connection has 10 seconds to start the taxi.
 - Declining a battleground no longer throws away the flight in progress.
 
 ### Removed

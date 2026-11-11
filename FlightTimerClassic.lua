@@ -19,14 +19,14 @@ local customTimes = {}
 local flightStarted = false
 -- Set on click. The clock stays off until the character is actually on the taxi.
 local pendingSince
--- Takeoff watch handle. A ticker is not parented to the box, so hiding the box does not stop it.
-local takeoffTicker
+-- Flight watch handle. A ticker is not parented to the box, so hiding the box does not stop it.
+local flightTicker
 -- True after UnitOnTaxi has been seen during this flight. Landing clears it.
 local confirmedTaxi
 -- A refused takeoff never leaves the ground.
-local TAKEOFF_WAIT = 30
--- How often the takeoff watch asks UnitOnTaxi. The clock can start this late.
-local TAKEOFF_POLL = 0.1
+local TAKEOFF_WAIT = 10
+-- How often the watch reads UnitOnTaxi. The clock and the landing can be this late.
+local FLIGHT_POLL = 0.1
 local mapHooked = false
 local taxiShowHooked = false
 local loadHooked = false
@@ -129,16 +129,17 @@ local function OnTaxi()
 	return not not onTaxi
 end
 
--- Cancel the takeoff watch. pendingSince is still set here, so the wait can be logged.
-local function StopTakeoffWatch(reason)
-	if not takeoffTicker then
+-- Cancel the flight watch. The click time or the air time is still set here, so it can be logged.
+local function StopFlightWatch(reason)
+	if not flightTicker then
 		return
 	end
-	local waited = pendingSince and (GetTime() - pendingSince) or 0
-	takeoffTicker:Cancel()
-	takeoffTicker = nil
+	local began = pendingSince or startTime
+	local waited = began and (GetTime() - began) or 0
+	flightTicker:Cancel()
+	flightTicker = nil
 	if FTCConfig and FTCConfig.debug then
-		consoleLog(format("Takeoff watch stopped after %.1fs (%s).", waited, reason))
+		consoleLog(format("Flight watch stopped after %.1fs (%s).", waited, reason))
 	end
 end
 
@@ -146,7 +147,6 @@ local function BeginFlightClock()
 	if startTime or not pendingSince then
 		return
 	end
-	StopTakeoffWatch("on taxi")
 	startTime = GetTime()
 	pendingSince = nil
 	if estimatedT then
@@ -156,7 +156,7 @@ end
 
 -- Drop a click that never took off. Keep the flight master node; the map is still open.
 local function AbortTakeoff(reason)
-	StopTakeoffWatch(reason or "aborted")
+	StopFlightWatch(reason or "aborted")
 	pendingSince = nil
 	confirmedTaxi = nil
 	startTime = nil
@@ -169,40 +169,8 @@ local function AbortTakeoff(reason)
 	FlightFrame:Hide()
 end
 
--- Runs until the character is on the taxi, or until TAKEOFF_WAIT says the click failed.
-local function WatchTakeoff()
-	if not pendingSince then
-		return
-	end
-	local onTaxi = OnTaxi()
-	-- false: still on the ground. nil: the API cannot answer, so start anyway.
-	if onTaxi ~= false then
-		BeginFlightClock()
-		return
-	end
-	if GetTime() - pendingSince > TAKEOFF_WAIT then
-		AbortTakeoff("still on the ground")
-	end
-end
-
-local function StartTakeoffWatch()
-	-- The caller already stopped the previous watch, while its start time was still set.
-	if takeoffTicker then
-		takeoffTicker:Cancel()
-		takeoffTicker = nil
-	end
-	if not C_Timer or type(C_Timer.NewTicker) ~= "function" then
-		return
-	end
-	takeoffTicker = C_Timer.NewTicker(TAKEOFF_POLL, WatchTakeoff)
-end
-
 local function ResetFlight()
-	-- The watch is already stopped when a flight ends. This covers a reset in between.
-	if takeoffTicker then
-		takeoffTicker:Cancel()
-		takeoffTicker = nil
-	end
+	StopFlightWatch("reset")
 	flightStarted = false
 	pendingSince = nil
 	confirmedTaxi = nil
@@ -245,6 +213,33 @@ local function FinishFlight()
 	ResetFlight()
 end
 
+-- The number on the box. The watch calls this, so a hidden box simply skips the paint.
+local function PaintClock()
+	if not FlightFrame.time or not FlightFrame:IsShown() then
+		return
+	end
+	if not startTime then
+		if pendingSince then
+			FlightFrame.time:SetText(UNKNOWN)
+		end
+		return
+	end
+
+	local now = GetTime()
+	if endTime == nil then
+		FlightFrame.time:SetText(getFormattedTime(now - startTime))
+		return
+	end
+
+	-- Count down, then the time past the estimate.
+	local t = ceil(endTime - now)
+	if t >= 0 then
+		FlightFrame.time:SetText(getFormattedTime(t))
+	else
+		FlightFrame.time:SetText('+' .. getFormattedTime((t - 1) * -1))
+	end
+end
+
 local function FlightFrame_Show()
 
 	if not flightFrameLoaded then
@@ -274,54 +269,52 @@ local function FlightFrame_Show()
 
 		FlightFrame:SetScript("OnLeave", GameTooltip_Hide)
 
-		FlightFrame:SetScript("OnUpdate", function(self, elapsed)
-			if not startTime then
-				-- The ticker watches takeoff. This is only the fallback when C_Timer is missing.
-				if pendingSince and not takeoffTicker then
-					WatchTakeoff()
-				end
-				if not startTime then
-					-- Idle /ftc show keeps its sample. Only the takeoff wait is unknown.
-					if pendingSince then
-						self.time:SetText(UNKNOWN)
-					end
-					return
-				end
-			end
-
-			-- The landing event can run while the taxi flag is still set, and it does not fire again.
-			local onTaxi = OnTaxi()
-			if onTaxi == true then
-				confirmedTaxi = true
-			elseif onTaxi == false and confirmedTaxi then
-				FinishFlight()
-				return
-			end
-
-			local now = GetTime()
-
-			-- endTime unknown, show count up
-			if endTime == nil then
-				local t = now - startTime
-				self.time:SetText(getFormattedTime(t))
-
-			-- endTime known, show count down
-			else 
-				local t = ceil(endTime - now)
-				if t >= 0 then
-					self.time:SetText(getFormattedTime(t))
-				else
-					self.time:SetText('+' .. getFormattedTime((t-1) * -1))
-				end
-			end
-		end)
-
 		FlightFrame.time = FlightFrame:CreateFontString(nil, "BACKGROUND", "GameFontHighlight")
 		FlightFrame.time:SetPoint("CENTER", FlightFrame, "CENTER")
 	end
 	
 	FlightFrame.time:SetText(UNKNOWN)
 	FlightFrame:Show()
+	PaintClock()
+end
+
+-- Takeoff, the taxi flag, and the number. Runs from the click until the flight is saved or dropped.
+local function WatchFlight()
+	if pendingSince then
+		local onTaxi = OnTaxi()
+		-- false: still on the ground. nil: the API cannot answer, so start anyway.
+		if onTaxi ~= false then
+			BeginFlightClock()
+		elseif GetTime() - pendingSince > TAKEOFF_WAIT then
+			AbortTakeoff("still on the ground")
+			return
+		end
+	end
+
+	if startTime then
+		-- The landing event can run while the taxi flag is still set, and it does not fire again.
+		local onTaxi = OnTaxi()
+		if onTaxi == true then
+			confirmedTaxi = true
+		elseif onTaxi == false and confirmedTaxi then
+			FinishFlight()
+			return
+		end
+	end
+
+	PaintClock()
+end
+
+local function StartFlightWatch()
+	-- The caller already stopped the previous watch, while its start time was still set.
+	if flightTicker then
+		flightTicker:Cancel()
+		flightTicker = nil
+	end
+	if not C_Timer or type(C_Timer.NewTicker) ~= "function" then
+		return
+	end
+	flightTicker = C_Timer.NewTicker(FLIGHT_POLL, WatchFlight)
 end
 
 local function CancelFlight()
@@ -768,7 +761,7 @@ function FlightFrame:PLAYER_CONTROL_GAINED()
 		consoleLog("PLAYER_CONTROL_GAINED")
 	end
 
-	-- Still in the air. OnUpdate stops the clock once the taxi flag drops.
+	-- Still in the air. The flight watch stops the clock once the taxi flag drops.
 	if startTime and OnTaxi() then
 		return
 	end
@@ -778,7 +771,7 @@ function FlightFrame:PLAYER_CONTROL_GAINED()
 		return
 	end
 
-	-- Clicked, not airborne yet. The takeoff watch is still waiting on the server.
+	-- Clicked, not airborne yet. The flight watch is still waiting on the server.
 	if pendingSince then
 		return
 	end
@@ -825,14 +818,14 @@ TakeTaxiNode
 hooksecurefunc("TakeTaxiNode", function(slot)
 
 	-- A second click replaces a wait that has not left the ground. Log that wait first.
-	StopTakeoffWatch("restarted")
+	StopFlightWatch("restarted")
 	flightStarted = true
 	if not currentId then
 		ReadCurrentNode()
 	end
 	endName = ShortName(TaxiNodeName(slot))
 	endId = GetNodeID(slot)
-	-- The clock starts in the takeoff watch, once the character is on the taxi.
+	-- The clock starts in the flight watch, once the character is on the taxi.
 	startTime = nil
 	endTime = nil
 	pendingSince = GetTime()
@@ -843,7 +836,7 @@ hooksecurefunc("TakeTaxiNode", function(slot)
 	end
 
 	FlightFrame_Show()
-	StartTakeoffWatch()
+	StartFlightWatch()
 end)
 
 
