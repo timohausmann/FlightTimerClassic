@@ -15,6 +15,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - The flight map tooltip says "Estimated time" or "Recorded time".
 - The clock starts when the character is on the taxi, not when the flight master is clicked.
 - `/ftc show` shows a static placeholder time.
+- Chat tag is [FTC]. Command replies name the command that reverses them.
+- Login message is "Ready." and points at `/ftc help`.
 
 ### Fixed
 - Hiding the timer box still records the flight, before liftoff and after. Takeoff and landing share one ticker. A slow connection has 10 seconds to start the taxi.

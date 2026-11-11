@@ -16,10 +16,10 @@ The time shown for a route is an estimate from the path length until this charac
 
 Available commands: 
 
-* `/ftc mute` – Enable/disable information in chat window.
-* `/ftc show` – Show the FTC UI for positioning.
-* `/ftc hide` – Hide the FTC UI.
-* `/ftc debug` – Enable/disable debug output.
+* `/ftc mute` – Turn info messages on or off.
+* `/ftc show` – Show the timer for positioning.
+* `/ftc hide` – Hide the timer.
+* `/ftc debug` – Turn debug output on or off.
 * `/ftc help` – Show help.
 
 Huge credit to [PhanxFlightTimer](https://github.com/phanx-wow/PhanxFlightTimer), 

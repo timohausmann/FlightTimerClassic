@@ -80,7 +80,7 @@ end
 
 local function consoleLog(text, important)
 	if important or not FTCConfig or not FTCConfig.mute then
-		print(format("|cff00ccff[FlightTimerClassic]|cff66ddff %s", text))
+		print(format("|cff00ccff[FTC]|cff66ddff %s", text))
 	end
 end
 
@@ -660,42 +660,46 @@ local function FTCCommands(msg, editbox)
 			FTCConfig.debug = not FTCConfig.debug
 
 			if FTCConfig.debug then
-				consoleLog('Type |cffcceeff/ftc debug |cff66ddffagain to disable.', true)
+				consoleLog('Debug on. Type |cffcceeff/ftc debug |cff66ddffto turn it off.', true)
 			else
-				consoleLog('Type |cffcceeff/ftc debug |cff66ddffagain to enable.', true)
+				consoleLog('Debug off. Type |cffcceeff/ftc debug |cff66ddffto turn it on.', true)
 			end
 		end,
 		mute = function()
 			FTCConfig.mute = not FTCConfig.mute
 
 			if FTCConfig.mute then
-				consoleLog('Disabled info messages. Type |cffcceeff/ftc mute |cff66ddffagain to unmute.', true)
+				consoleLog('Info messages off. Type |cffcceeff/ftc mute |cff66ddffto turn them on.', true)
 			else
-				consoleLog('Enabled info messages. Type |cffcceeff/ftc mute |cff66ddffagain to mute.', true)
+				consoleLog('Info messages on. Type |cffcceeff/ftc mute |cff66ddffto turn them off.', true)
 			end
 		end,
 		show = function()
-			if FlightFrame == nil or not FlightFrame:IsShown() then
+			if not FlightFrame:IsShown() then
 				FlightFrame_Show()
 				-- /ftc show sample. A real flight replaces it.
 				if not startTime and not pendingSince then
 					FlightFrame.time:SetText(getFormattedTime(90))
 				end
-				consoleLog('Revealed FTC UI for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide.', true)
-			else 
-				consoleLog('FTC UI should already be visible.', true)
+				consoleLog('Timer shown for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide it.', true)
+			else
+				consoleLog('Timer already shown. Type |cffcceeff/ftc hide |cff66ddffto hide it.', true)
 			end
 		end,
 		hide = function()
-			FlightFrame:Hide()
-			consoleLog('Hiding FTC UI.', true)
+			if FlightFrame:IsShown() then
+				FlightFrame:Hide()
+				consoleLog('Timer hidden. Type |cffcceeff/ftc show |cff66ddffto show it.', true)
+			else
+				consoleLog('Timer already hidden. Type |cffcceeff/ftc show |cff66ddffto show it.', true)
+			end
 		end,
 		help = function()
-			consoleLog('|cffcceeff/ftc show |cff66ddff– Show the FTC UI for positioning.', true)
-			consoleLog('|cffcceeff/ftc hide |cff66ddff– Hide the FTC UI.', true)
-			consoleLog('|cffcceeff/ftc mute |cff66ddff– Enable/disable information in chat.', true)
-			consoleLog('|cffcceeff/ftc debug |cff66ddff– Enable/disable debug output.', true)
-			consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help text.', true)
+			consoleLog('|cffcceeff/ftc show |cff66ddff– Show the timer for positioning.', true)
+			consoleLog('|cffcceeff/ftc hide |cff66ddff– Hide the timer.', true)
+			consoleLog('|cffcceeff/ftc mute |cff66ddff– Turn info messages on or off.', true)
+			consoleLog('|cffcceeff/ftc debug |cff66ddff– Turn debug output on or off.', true)
+			consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help.', true)
 		end
 	}
 
@@ -744,9 +748,9 @@ function FlightFrame:PLAYER_LOGIN()
 	defaultTimes = FTCData or {}
 
 	if FTCData then
-		consoleLog("Flight paths loaded.")
+		consoleLog("Ready. Type |cffcceeff/ftc help |cff66ddfffor all commands.")
 	else
-		consoleLog("There are currently no flight durations included.")
+		consoleLog("No flight durations included. Type |cffcceeff/ftc help |cff66ddfffor all commands.")
 	end
 end
 
