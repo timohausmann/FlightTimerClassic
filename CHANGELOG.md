@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `/ftc show` shows a static placeholder time.
 - Chat tag is [FTC]. Command replies name the command that reverses them.
 - Login message is "Ready." and points at `/ftc help`.
+- Shift-click the timer while typing to paste an arrival line. An overdue timer says it is landing any second.
 
 ### Fixed
 - Hiding the timer box still records the flight, before liftoff and after. Takeoff and landing share one ticker. A slow connection has 10 seconds to start the taxi.

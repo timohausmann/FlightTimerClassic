@@ -22,6 +22,8 @@ Available commands:
 * `/ftc debug` – Turn debug output on or off.
 * `/ftc help` – Show help.
 
+Shift-click the timer while typing a chat message to paste your arrival.
+
 Huge credit to [PhanxFlightTimer](https://github.com/phanx-wow/PhanxFlightTimer), 
 [InFlight](https://www.curseforge.com/wow/addons/inflight-taxi-timer) and 
 [Consequence-Flightmaster](https://www.curseforge.com/wow/addons/consequence-flightmaster)

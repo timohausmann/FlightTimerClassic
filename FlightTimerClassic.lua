@@ -62,7 +62,16 @@ end
 Local Functions
 --]]
 
-local function Frame_OnMouseDown(frame)
+-- Filled in once the clock text exists. Shift-click pastes an arrival line.
+local PasteArrival
+
+local function Frame_OnMouseDown(frame, button)
+	-- Chat link key, Shift unless the player changed it. Insert now: the click
+	-- would otherwise close the chat line before mouse-up. Do not open chat.
+	if button == "LeftButton" and IsModifiedClick("CHATLINK") then
+		PasteArrival()
+		return
+	end
 	frame:StartMoving()
 end
 
@@ -213,6 +222,18 @@ local function FinishFlight()
 	ResetFlight()
 end
 
+-- Time left, or the "+N" the box shows once the estimate has passed.
+local function CountdownText()
+	if not endTime then
+		return
+	end
+	local t = ceil(endTime - GetTime())
+	if t >= 0 then
+		return getFormattedTime(t), false
+	end
+	return getFormattedTime((t - 1) * -1), true
+end
+
 -- The number on the box. The watch calls this, so a hidden box simply skips the paint.
 local function PaintClock()
 	if not FlightFrame.time or not FlightFrame:IsShown() then
@@ -225,19 +246,39 @@ local function PaintClock()
 		return
 	end
 
-	local now = GetTime()
 	if endTime == nil then
-		FlightFrame.time:SetText(getFormattedTime(now - startTime))
+		FlightFrame.time:SetText(getFormattedTime(GetTime() - startTime))
 		return
 	end
 
-	-- Count down, then the time past the estimate.
-	local t = ceil(endTime - now)
-	if t >= 0 then
-		FlightFrame.time:SetText(getFormattedTime(t))
-	else
-		FlightFrame.time:SetText('+' .. getFormattedTime((t - 1) * -1))
+	local text, overdue = CountdownText()
+	FlightFrame.time:SetText(overdue and ('+' .. text) or text)
+end
+
+function PasteArrival()
+	if type(ChatEdit_GetActiveWindow) ~= "function" then
+		return
 	end
+	local editBox = ChatEdit_GetActiveWindow()
+	if not editBox or not editBox:IsShown() then
+		return
+	end
+	local text, overdue = CountdownText()
+	if not text then
+		return
+	end
+	local place = endName and (" in " .. endName) or ""
+	local line
+	if overdue then
+		line = "Arrival" .. place .. " " .. text .. " overdue, landing any second now"
+	else
+		line = "Arriving" .. place .. " in " .. text
+	end
+	local existing = editBox:GetText() or ""
+	if existing ~= "" and not strmatch(existing, "%s$") then
+		line = " " .. line
+	end
+	editBox:Insert(line)
 end
 
 local function FlightFrame_Show()
@@ -263,6 +304,7 @@ local function FlightFrame_Show()
 			GameTooltip:AddDoubleLine(L.FlyingTo, endName or UNKNOWN, 1, 0.82, 0, 1, 1, 1)
 
 			AddEstimatedLine(estimatedT, timeIsEstimate)
+			GameTooltip:AddLine("Shift-click while typing to paste your arrival.", 1, 1, 1)
 
 			GameTooltip:Show()
 		end)
@@ -700,6 +742,7 @@ local function FTCCommands(msg, editbox)
 			consoleLog('|cffcceeff/ftc mute |cff66ddff– Turn info messages on or off.', true)
 			consoleLog('|cffcceeff/ftc debug |cff66ddff– Turn debug output on or off.', true)
 			consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help.', true)
+			consoleLog('Shift-click the timer while typing to paste your arrival.', true)
 		end
 	}
 
