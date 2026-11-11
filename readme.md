@@ -2,7 +2,7 @@
 
 Record and display flight durations for WoW Forever.
 
-The time shown for a route is an estimate from the path length until this character has flown that route.
+The time shown for a route is an estimate from the path length until a character has flown that route.
 
 <a href="./screenshots/flightmap.jpg">
     <img src="./screenshots/flightmap.jpg" alt="Flightmap" width="200" />
