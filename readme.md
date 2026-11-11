@@ -19,7 +19,7 @@ Available commands:
 * `/ftc mute` – Enable/disable information in chat window.
 * `/ftc show` – Show the FTC UI for positioning.
 * `/ftc hide` – Hide the FTC UI.
-* `/ftc debug` – Show/hide debug information about flight map buttons.
+* `/ftc debug` – Enable/disable debug output.
 * `/ftc help` – Show help.
 
 Huge credit to [PhanxFlightTimer](https://github.com/phanx-wow/PhanxFlightTimer), 

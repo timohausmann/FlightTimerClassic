@@ -70,7 +70,7 @@ local function Frame_OnMouseUp(frame)
 	frame:StopMovingOrSizing()
 end
 
--- "Stormwind, Elwynn" is stored and shown as "Stormwind".
+-- "Stormwind, Elwynn" is shown as "Stormwind". Times are stored by node id.
 local function ShortName(name)
 	if not name then
 		return
@@ -101,57 +101,6 @@ local function AddEstimatedLine(seconds, isEstimate)
 	local text = seconds and getFormattedTime(seconds) or UNKNOWN
 	local label = (seconds and not isEstimate) and L.RecordedTime or L.EstimatedTime
 	GameTooltip:AddDoubleLine(label, text, 1, 0.82, 0, 1, 1, 1)
-end
-
-
---[[
-CopyFrame
---]]
-
-local CopyFrame
-local function CopyFrame_Show(text)
-
-	if not CopyFrame then
-		CopyFrame = CreateFrame("Frame", nil, UIParent, BackdropTemplateMixin and "BackdropTemplate" or nil)
-		CopyFrame:SetMovable(true)
-		CopyFrame:SetScript("OnMouseDown", Frame_OnMouseDown)
-		CopyFrame:SetScript("OnMouseUp", Frame_OnMouseUp)
-		CopyFrame:SetClampedToScreen(true)
-		CopyFrame:SetSize(480,360)
-		CopyFrame:SetPoint("CENTER")
-
-		CopyFrame:SetBackdrop({
-			bgFile = "Interface\\DialogFrame\\UI-DialogBox-Background",
-			edgeFile = "Interface\\DialogFrame\\UI-DialogBox-Border",
-			tile = true, tileSize = 32, edgeSize = 16,
-			insets = { left = 8, right = 8, top = 8, bottom = 8 }
-		})
-
-		CopyFrame.text = CopyFrame:CreateFontString(nil, "BACKGROUND", "GameFontNormal")
-		CopyFrame.text:SetWidth(400)
-		CopyFrame.text:SetPoint("CENTER", CopyFrame, "TOP", 0, -30)
-		CopyFrame.text:SetText("Please share this data with Flight Timer Classic.\nThanks for your contribution to improve this AddOn.")
-
-		CopyFrame.scrollFrame = CreateFrame("ScrollFrame", "MyMultiLineEditBox", CopyFrame, "InputScrollFrameTemplate")
-		CopyFrame.scrollFrame:SetSize(480-32,240)
-		CopyFrame.scrollFrame:SetPoint("CENTER")
-		CopyFrame.scrollFrame.EditBox:SetFontObject("ChatFontNormal")
-		CopyFrame.scrollFrame.EditBox:SetMaxLetters(0)
-		CopyFrame.scrollFrame.EditBox:SetWidth(480-32)
-		CopyFrame.scrollFrame.CharCount:Hide()
-		CopyFrame.scrollFrame.EditBox:SetScript("OnEscapePressed", function() CopyFrame:Hide() end)
-
-		CopyFrame.CloseButton = CreateFrame("Button", nil, CopyFrame, "GameMenuButtonTemplate");
-		CopyFrame.CloseButton:SetPoint("BOTTOM", CopyFrame, "BOTTOM", 0, 20);
-		CopyFrame.CloseButton:SetSize(96, 24);
-		CopyFrame.CloseButton:SetText("Close");
-		CopyFrame.CloseButton:SetScript("OnClick", function() CopyFrame:Hide() end)
-	end
-
-	CopyFrame.scrollFrame.EditBox:SetText(text)
-	CopyFrame.scrollFrame.EditBox:SetAutoFocus(true)
-	CopyFrame.scrollFrame.EditBox:HighlightText()
-	CopyFrame:Show()
 end
 
 
@@ -697,29 +646,6 @@ local function EnsureMapHooks()
 	end
 end
 
-local function ShowDebugNodes()
-	if not C_TaxiMap or type(C_TaxiMap.GetAllTaxiNodes) ~= "function" then
-		return
-	end
-	local mapID = GetViewedTaxiMapID()
-	if not mapID then
-		return
-	end
-	local nodes = C_TaxiMap.GetAllTaxiNodes(mapID)
-	if not nodes then
-		return
-	end
-	local lines = "name;nodeID;x;y"
-	for i = 1, #nodes do
-		local node = nodes[i]
-		local pos = node.position
-		local x = pos and pos.x or ""
-		local y = pos and pos.y or ""
-		lines = lines .. "\n" .. (ShortName(node.name) or "") .. ";" .. (node.nodeID or "") .. ";" .. x .. ";" .. y
-	end
-	CopyFrame_Show(lines)
-end
-
 FlightFrame:UnregisterAllEvents()
 FlightFrame:RegisterEvent("ADDON_LOADED")
 FlightFrame:RegisterEvent("PLAYER_LOGIN")
@@ -741,10 +667,9 @@ local function FTCCommands(msg, editbox)
 			FTCConfig.debug = not FTCConfig.debug
 
 			if FTCConfig.debug then
-				consoleLog('Debug enabled. Type |cffcceeff/ftc debug |cff66ddffagain to disable.', true)
-				ShowDebugNodes()
+				consoleLog('Type |cffcceeff/ftc debug |cff66ddffagain to disable.', true)
 			else
-				consoleLog('Debug disabled. Type |cffcceeff/ftc debug |cff66ddffagain to enable.', true)
+				consoleLog('Type |cffcceeff/ftc debug |cff66ddffagain to enable.', true)
 			end
 		end,
 		mute = function()
@@ -775,6 +700,7 @@ local function FTCCommands(msg, editbox)
 		help = function()
 			consoleLog('|cffcceeff/ftc show |cff66ddff– Show the FTC UI for positioning.', true)
 			consoleLog('|cffcceeff/ftc hide |cff66ddff– Hide the FTC UI.', true)
+			consoleLog('|cffcceeff/ftc mute |cff66ddff– Enable/disable information in chat.', true)
 			consoleLog('|cffcceeff/ftc debug |cff66ddff– Enable/disable debug output.', true)
 			consoleLog('|cffcceeff/ftc help |cff66ddff– Show this help text.', true)
 		end
@@ -784,7 +710,7 @@ local function FTCCommands(msg, editbox)
 	if(func) then
 		func()
 	else
-		consoleLog(format('unkown command: |cffcceeff%q', msg))
+		consoleLog(format('unknown command: |cffcceeff%q', msg))
 		cmds.help()
 	end
 end
@@ -889,10 +815,6 @@ function FlightFrame:TAXIMAP_OPENED()
 		end
 	end
 	tryBind(0)
-
-	if FTCConfig and FTCConfig.debug then
-		ShowDebugNodes()
-	end
 end
 
 
