@@ -2,7 +2,7 @@
 
 ## Title: Flight Timer Classic
 ## Notes: Flight times for WoW Forever. Estimates until this character has flown the route.
-## Author: Nomana
+## Author: trashyger
 ## Version: 0.7.0
 ## SavedVariables: FTCCustomData, FTCConfig
 FlightTimerClassic.lua
