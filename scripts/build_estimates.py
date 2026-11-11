@@ -16,8 +16,7 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-# Flight speed used to turn path length into seconds. Change this after a real
-# flight and regenerate; Lua stores the rounded seconds and does not rescale.
+# Flight speed.
 TAXI_YARDS_PER_SECOND = 30
 
 # TaxiPathNode.Flags bit that means this waypoint's Delay is part of the flight.
@@ -31,10 +30,16 @@ DROP_PREFIXES = (
     "Programmer Isle",
 )
 
-# (source, dest, min seconds, max seconds). The build is wrong if these fail.
+# Flown direct routes, no Frequent Flier (2026-11-11). The estimate must land
+# within 2 seconds, the same margin the addon uses before it calls a time a correction.
+# (source, dest, min seconds, max seconds)
 REQUIRED_EDGES = (
-    (2, 4, 20, 240),
-    (3203, 56, 20, 600),
+    (2, 4, 77, 81),  # Stormwind -> Sentinel Hill, flew 79
+    (2, 5, 112, 116),  # Stormwind -> Lakeshire, flew 114
+    (2, 6, 258, 262),  # Stormwind -> Ironforge, flew 260
+    (4, 12, 95, 99),  # Sentinel Hill -> Darkshire, flew 97
+    (5, 12, 59, 63),  # Lakeshire -> Darkshire, flew 61
+    (6, 14, 263, 267),  # Ironforge -> Southshore, flew 265
 )
 
 BANNED_COMMENT_TEXT = ("Quest Path", "Transport")
