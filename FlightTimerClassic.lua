@@ -283,7 +283,10 @@ local function FlightFrame_Show()
 					AbortTakeoff()
 					return
 				else
-					self.time:SetText(UNKNOWN)
+					-- Idle /ftc show keeps its sample. Only the takeoff wait is unknown.
+					if pendingSince then
+						self.time:SetText(UNKNOWN)
+					end
 					return
 				end
 			end
@@ -712,12 +715,12 @@ local function FTCCommands(msg, editbox)
 			end
 		end,
 		show = function()
-			-- show some fake up counting
-			if startTime == nil then
-				startTime = GetTime()
-			end
 			if FlightFrame == nil or not FlightFrame:IsShown() then
 				FlightFrame_Show()
+				-- /ftc show sample. A real flight replaces it.
+				if not startTime and not pendingSince then
+					FlightFrame.time:SetText(getFormattedTime(90))
+				end
 				consoleLog('Revealed FTC UI for positioning. Type |cffcceeff/ftc hide |cff66ddffto hide.', true)
 			else 
 				consoleLog('FTC UI should already be visible.', true)
