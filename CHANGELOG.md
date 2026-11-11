@@ -7,8 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-11
+
 ### Added
 
+- Support for WoW Forever!
 - Estimated times for direct routes, from the flight path length. A route with stops adds those legs until a character has flown the whole route.
 - Frequent Flier support. Saved times stay the duration without the perk, and a character who has it sees the shorter time.
 - Player-facing text follows the client language: English, German, Spanish, French, Italian, Korean, Portuguese, Russian, Simplified Chinese, and Traditional Chinese. A missing line stays English. The addon name and `/ftc` stay as they are.
