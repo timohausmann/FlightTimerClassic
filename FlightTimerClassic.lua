@@ -412,7 +412,8 @@ local function HasFrequentFlier()
 	return rank and rank > 0
 end
 
--- Saved total for this pair first. Else add FTCData edges. A saved total is never one hop.
+-- Saved total for this pair first. Else the same saved seconds for the direct flight back.
+-- A saved total is never one hop.
 local function ResolveTime(srcId, dstId, slot)
 	if not srcId or not dstId then
 		return
@@ -425,6 +426,13 @@ local function ResolveTime(srcId, dstId, slot)
 	local ids = RouteNodeIDs(slot, srcId, dstId)
 	if not ids then
 		return
+	end
+	-- Direct return only. A multi-hop total is a different road.
+	if #ids == 2 then
+		local reverse = customTimes[dstId] and customTimes[dstId][srcId]
+		if type(reverse) == "number" and reverse > 0 then
+			return reverse, true
+		end
 	end
 	local sum = 0
 	for i = 1, #ids - 1 do

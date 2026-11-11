@@ -18,7 +18,7 @@ from pathlib import Path
 
 # Flight speed used to turn path length into seconds. Change this after a real
 # flight and regenerate; Lua stores the rounded seconds and does not rescale.
-TAXI_YARDS_PER_SECOND = 32
+TAXI_YARDS_PER_SECOND = 30
 
 # TaxiPathNode.Flags bit that means this waypoint's Delay is part of the flight.
 DELAY_FLAG = 2
