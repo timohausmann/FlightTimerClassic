@@ -35,6 +35,7 @@ Localization
 
 local L = {
 	EstimatedTime = "Estimated time:",
+	RecordedTime = "Recorded time:",
 	FlyingFrom = "Flying from:",
 	FlyingTo = "Flying to:",
 	TimeMinSec = gsub(MINUTE_ONELETTER_ABBR, "%s", "") .. " " .. gsub(SECOND_ONELETTER_ABBR, "%s", ""),
@@ -42,10 +43,12 @@ local L = {
 }
 if GetLocale() == "deDE" then
 	L.EstimatedTime = "Geschätzte Flugzeit:"
+	L.RecordedTime = "Erfasste Flugzeit:"
 	L.FlyingFrom = "Fliegt von:"
 	L.FlyingTo = "Flug nach:"
 elseif strmatch(GetLocale(), "^es") then
 	L.EstimatedTime = "Tiempo estimado:"
+	L.RecordedTime = "Tiempo registrado:"
 	L.FlyingFrom = "Vuelo de:"
 	L.FlyingTo = "Vuelo a:"
 end
@@ -89,14 +92,11 @@ local function getFormattedTime(t)
 	end
 end
 
--- Gray until this character has flown the route. White once the saved time is used.
+-- The number stays white. The label says where it came from.
 local function AddEstimatedLine(seconds, isEstimate)
 	local text = seconds and getFormattedTime(seconds) or UNKNOWN
-	local r, g, b = 1, 1, 1
-	if not seconds or isEstimate then
-		r, g, b = 0.6, 0.6, 0.6
-	end
-	GameTooltip:AddDoubleLine(L.EstimatedTime, text, 1, 0.82, 0, r, g, b)
+	local label = (seconds and not isEstimate) and L.RecordedTime or L.EstimatedTime
+	GameTooltip:AddDoubleLine(label, text, 1, 0.82, 0, 1, 1, 1)
 end
 
 
@@ -431,7 +431,7 @@ local function ResolveTime(srcId, dstId, slot)
 	if #ids == 2 then
 		local reverse = customTimes[dstId] and customTimes[dstId][srcId]
 		if type(reverse) == "number" and reverse > 0 then
-			return reverse, true
+			return reverse, false
 		end
 	end
 	local sum = 0
