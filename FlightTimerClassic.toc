@@ -1,6 +1,7 @@
 ## Interface: 16001
 
 ## Title: Flight Timer Classic
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_02
 ## Notes: Flight times for WoW Forever. Estimates until this character has flown the route.
 ## Author: trashyger
 ## Version: 0.7.0
