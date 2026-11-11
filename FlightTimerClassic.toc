@@ -1,9 +1,21 @@
-## Interface: 11404
+## Interface: 16001
 
 ## Title: Flight Timer Classic
-## Notes: Record and display flight durations for Classic WoW.
-## Author: Nomana
-## Version: 0.6.1
+## IconTexture: Interface\Icons\INV_Misc_PocketWatch_02
+## Notes: Flight times for WoW Forever. Estimates until a character has flown the route.
+## Notes-deDE: Flugzeiten für WoW Forever. Schätzungen, bis ein Charakter die Strecke geflogen ist.
+## Notes-esES: Tiempos de vuelo para WoW Forever. Estimaciones hasta que un personaje complete la ruta por primera vez.
+## Notes-esMX: Tiempos de vuelo para WoW Forever. Estimaciones hasta que un personaje complete la ruta por primera vez.
+## Notes-frFR: Temps de vol pour WoW Forever. Estimations jusqu'à ce qu'un personnage ait effectué le trajet.
+## Notes-itIT: Tempi di volo per WoW Forever. Stime finché un personaggio non ha volato la rotta.
+## Notes-koKR: WoW Forever 비행 시간. 한 캐릭터가 경로를 비행하기 전까지는 예상 시간입니다.
+## Notes-ptBR: Tempos de voo para WoW Forever. Estimativas até que um personagem tenha voado a rota.
+## Notes-ruRU: Время перелетов для WoW Forever. Оценки, пока один из персонажей не пролетит маршрут.
+## Notes-zhCN: WoW Forever 飞行时间。在一名角色飞过该路线之前为预计时间。
+## Notes-zhTW: WoW Forever 飛行時間。在一名角色飛過該路線之前為預計時間。
+## Author: trashyger
+## Version: 0.7.0
 ## SavedVariables: FTCCustomData, FTCConfig
+Localization.lua
 FlightTimerClassic.lua
 Data.lua

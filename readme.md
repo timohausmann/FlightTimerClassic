@@ -1,6 +1,8 @@
 # Flight Timer Classic
 
-Record and display flight durations for Classic WoW.
+Record and display flight durations for WoW Forever.
+
+The time shown for a route is an estimate from the path length until a character has flown that route.
 
 <a href="./screenshots/flightmap.jpg">
     <img src="./screenshots/flightmap.jpg" alt="Flightmap" width="200" />
@@ -14,11 +16,13 @@ Record and display flight durations for Classic WoW.
 
 Available commands: 
 
-* `/ftc mute` – Enable/disable information in chat window.
-* `/ftc show` – Show the FTC UI for positioning.
-* `/ftc hide` – Hide the FTC UI.
-* `/ftc debug` – Show/hide debug information about flight map buttons.
+* `/ftc mute` – Turn info messages on or off.
+* `/ftc show` – Show the timer for positioning.
+* `/ftc hide` – Hide the timer.
+* `/ftc debug` – Turn debug output on or off.
 * `/ftc help` – Show help.
+
+Shift-click the timer while typing a chat message to paste your arrival.
 
 Huge credit to [PhanxFlightTimer](https://github.com/phanx-wow/PhanxFlightTimer), 
 [InFlight](https://www.curseforge.com/wow/addons/inflight-taxi-timer) and 
