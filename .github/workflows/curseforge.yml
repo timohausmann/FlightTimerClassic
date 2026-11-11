@@ -1,0 +1,199 @@
+name: Upload to CurseForge
+
+# Remember to add CURSEFORGE_TOKEN as a repository secret.
+
+on:
+  push:
+    tags:
+      # * matches any character, so this also covers tags that start with v.
+      - "*.*.*"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+env:
+  ADDON_NAME: FlightTimerClassic
+  CF_PROJECT_ID: "554379"
+  PACKAGE_EXCLUDE: ".git .github"
+
+jobs:
+  upload:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v7
+
+      - name: Check release type rules
+        shell: bash
+        run: bash .github/release-type.sh --test
+
+      - name: Package addon
+        id: package
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          toc="${ADDON_NAME}.toc"
+          if [ ! -f "$toc" ]; then
+            echo "::error::Missing ${toc}"
+            exit 1
+          fi
+
+          # || true: with pipefail, a missing line would stop before the error below.
+          toc_version=$(grep -m1 '^## Version:' "$toc" | tr -d '\r' | sed 's/^## Version:[[:space:]]*//' || true)
+          if [ -z "$toc_version" ]; then
+            echo "::error::No ## Version: in ${toc}"
+            exit 1
+          fi
+
+          parsed=$(bash .github/release-type.sh "$toc_version" "$GITHUB_REF_NAME" "$GITHUB_REF_TYPE")
+          version=$(printf '%s\n' "$parsed" | sed -n 's/^version=//p')
+          release_type=$(printf '%s\n' "$parsed" | sed -n 's/^release_type=//p')
+
+          stage="${RUNNER_TEMP}/stage"
+          dest="${stage}/${ADDON_NAME}"
+          rm -rf "$stage"
+          mkdir -p "$dest"
+
+          # PACKAGE_EXCLUDE is a space-separated list of top-level names.
+          shopt -s dotglob nullglob
+          exclude=" ${PACKAGE_EXCLUDE} "
+          for path in *; do
+            case "$exclude" in
+              *" ${path} "*) continue ;;
+            esac
+            cp -R "$path" "$dest/"
+          done
+
+          if [ ! -f "${dest}/${toc}" ]; then
+            echo "::error::${toc} was not packaged"
+            exit 1
+          fi
+
+          zip_path="${GITHUB_WORKSPACE}/${ADDON_NAME}-${version}.zip"
+          rm -f "$zip_path"
+          (cd "$stage" && zip -r -X "$zip_path" "$ADDON_NAME")
+
+          for ex in $PACKAGE_EXCLUDE; do
+            # Escape dots so ".git" does not match a folder named "agit".
+            needle=${ex//./\\.}
+            if unzip -l "$zip_path" | grep -Eq "/${needle}(/|$)"; then
+              echo "::error::Zip contains excluded ${ex}"
+              exit 1
+            fi
+          done
+
+          echo "Packaged ${zip_path}"
+          unzip -l "$zip_path"
+
+          {
+            echo "version=${version}"
+            echo "release_type=${release_type}"
+            echo "zip=${zip_path}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: ${{ env.ADDON_NAME }}-${{ steps.package.outputs.version }}
+          path: ${{ steps.package.outputs.zip }}
+          if-no-files-found: error
+
+      - name: Upload to CurseForge
+        shell: bash
+        env:
+          CF_API_TOKEN: ${{ secrets.CURSEFORGE_TOKEN }}
+          # Passed as env so a tag name is data, not shell code.
+          VERSION: ${{ steps.package.outputs.version }}
+          RELEASE_TYPE: ${{ steps.package.outputs.release_type }}
+          ZIP: ${{ steps.package.outputs.zip }}
+        run: |
+          set -euo pipefail
+
+          if [ -z "${CF_API_TOKEN:-}" ]; then
+            echo "::error::Missing secret CURSEFORGE_TOKEN"
+            exit 1
+          fi
+
+          versions="${RUNNER_TEMP}/game-versions.json"
+          vcode=$(curl -sS -o "$versions" -w "%{http_code}" \
+            -H "X-Api-Token: ${CF_API_TOKEN}" \
+            https://wow.curseforge.com/api/game/versions)
+          if [ "$vcode" != "200" ]; then
+            echo "::error::Game versions request failed with HTTP ${vcode}"
+            cat "$versions"
+            echo
+            exit 1
+          fi
+
+          iface_line=$(grep -m1 '^## Interface:' "${ADDON_NAME}.toc" | tr -d '\r' || true)
+          if [ -z "$iface_line" ]; then
+            echo "::error::No ## Interface: in ${ADDON_NAME}.toc"
+            exit 1
+          fi
+
+          # 120105 -> 12.1.5 and 16001 -> 1.60.1. CurseForge matches the dotted name.
+          ids=()
+          for iface in $(printf '%s\n' "$iface_line" | grep -oE '[0-9]+'); do
+            major=$((iface / 10000))
+            minor=$(((iface / 100) % 100))
+            patch=$((iface % 100))
+            gamever="${major}.${minor}.${patch}"
+            vid=$(jq -r --arg v "$gamever" '[.[] | select(.name == $v)] | .[0].id // empty' "$versions")
+            if [ -n "$vid" ]; then
+              echo "TOC Interface ${iface} -> ${gamever} -> CurseForge id ${vid}"
+              ids+=("$vid")
+            else
+              echo "::warning::TOC Interface ${iface} (${gamever}) has no CurseForge game version; not tagged."
+            fi
+          done
+
+          if [ "${#ids[@]}" -eq 0 ]; then
+            echo "::error::No TOC Interface resolved to a CurseForge game version"
+            exit 1
+          fi
+
+          gv=$(printf '%s\n' "${ids[@]}" | jq -s -c 'map(tonumber)')
+
+          changelog=""
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            changelog=$(git tag -l --format='%(contents)' "$GITHUB_REF_NAME" | tr -d '\r')
+          fi
+          if [ -z "${changelog//[[:space:]]/}" ]; then
+            changelog="See GitHub"
+          fi
+
+          meta="${RUNNER_TEMP}/metadata.json"
+          jq -nc \
+            --arg cl "$changelog" \
+            --arg dn "${ADDON_NAME} ${VERSION}" \
+            --arg rt "$RELEASE_TYPE" \
+            --argjson gv "$gv" \
+            '{changelog:$cl, changelogType:"text", displayName:$dn, releaseType:$rt, gameVersions:$gv}' \
+            > "$meta"
+
+          response="${RUNNER_TEMP}/curseforge-response.txt"
+          set +e
+          code=$(curl -sS -o "$response" -w "%{http_code}" \
+            -H "X-Api-Token: ${CF_API_TOKEN}" \
+            -F "metadata=<${meta};type=application/json" \
+            -F "file=@${ZIP}" \
+            "https://wow.curseforge.com/api/projects/${CF_PROJECT_ID}/upload-file")
+          curl_status=$?
+          set -e
+          if [ "$curl_status" -ne 0 ]; then
+            echo "::error::CurseForge upload failed before a response (${curl_status})"
+            cat "$response" || true
+            echo
+            exit 1
+          fi
+
+          echo "CurseForge HTTP ${code}"
+          cat "$response"
+          echo
+          if [ "$code" != "200" ]; then
+            echo "::error::CurseForge upload returned HTTP ${code}"
+            exit 1
+          fi
