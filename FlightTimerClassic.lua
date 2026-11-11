@@ -881,17 +881,15 @@ end)
 AcceptBattlefieldPort
 --]]
 
-if type(AcceptBattlefieldPort) == "function" then
-	hooksecurefunc("AcceptBattlefieldPort", function(index, accept)
-		if FTCConfig and FTCConfig.debug then
-			consoleLog("AcceptBattlefieldPort")
-		end
+hooksecurefunc("AcceptBattlefieldPort", function(index, accept)
+	if FTCConfig and FTCConfig.debug then
+		consoleLog("AcceptBattlefieldPort")
+	end
 
-		if flightStarted then
-			CancelFlight()
-		end
-	end)
-end
+	if accept and flightStarted then
+		CancelFlight()
+	end
+end)
 
 
 --[[
