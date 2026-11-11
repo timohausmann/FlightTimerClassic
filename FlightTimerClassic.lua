@@ -216,6 +216,9 @@ local function ResetFlight()
 	FlightFrame:Hide()
 end
 
+-- Defined with the perk helpers below. Saved times are seconds with no perk.
+local ActualToBase
+
 -- Save the flight and hide the box. Safe to call twice.
 local function FinishFlight()
 	if not startTime then
@@ -232,10 +235,10 @@ local function FinishFlight()
 		consoleLog("Arrived at |cffcceeff" .. (endName or UNKNOWN) .. "|cff66ddff after |cffcceeff" .. getFormattedTime(t) .. "|cff66ddff.")
 	end
 
-	-- Numeric node ids. Old Alliance / Horde hash keys are left in place.
+	-- Node ids, stored with no Frequent Flier.
 	if currentId and endId and t > 0 then
 		customTimes[currentId] = customTimes[currentId] or {}
-		customTimes[currentId][endId] = t
+		customTimes[currentId][endId] = ActualToBase(t)
 	end
 
 	ResetFlight()
@@ -391,8 +394,8 @@ local function RouteNodeIDs(slot, srcId, dstId)
 	return ids
 end
 
--- Frequent Flier is legacy node 110300, spell 1225490. Mounts are 20% faster,
--- so a base estimate is divided by 1.2. The node is how the game menu reads it.
+-- Frequent Flier is legacy node 110300, spell 1225490. Mounts are 20% faster.
+-- Estimates and saved times are both without that perk. Display divides by 1.2.
 local FREQUENT_FLIER_NODE = 110300
 
 local function HasFrequentFlier()
@@ -412,8 +415,27 @@ local function HasFrequentFlier()
 	return rank and rank > 0
 end
 
+-- The logged-in character's perk. Another character or realm stored the base time.
+local function BaseToActual(seconds)
+	if not HasFrequentFlier() then
+		return seconds
+	end
+	local scaled = math.floor(seconds / 1.2 + 0.5)
+	if scaled < 1 then
+		scaled = 1
+	end
+	return scaled
+end
+
+function ActualToBase(seconds)
+	if not HasFrequentFlier() then
+		return seconds
+	end
+	return math.floor(seconds * 1.2 + 0.5)
+end
+
 -- Saved total for this pair first. Else the same saved seconds for the direct flight back.
--- A saved total is never one hop.
+-- A saved total is never one hop. The perk is applied on the way out.
 local function ResolveTime(srcId, dstId, slot)
 	if not srcId or not dstId then
 		return
@@ -421,7 +443,7 @@ local function ResolveTime(srcId, dstId, slot)
 	local measured = customTimes[srcId] and customTimes[srcId][dstId]
 	-- A saved 0 is a failed click, not a flight. Fall through to the estimate.
 	if type(measured) == "number" and measured > 0 then
-		return measured, false
+		return BaseToActual(measured), false
 	end
 	local ids = RouteNodeIDs(slot, srcId, dstId)
 	if not ids then
@@ -431,7 +453,7 @@ local function ResolveTime(srcId, dstId, slot)
 	if #ids == 2 then
 		local reverse = customTimes[dstId] and customTimes[dstId][srcId]
 		if type(reverse) == "number" and reverse > 0 then
-			return reverse, false
+			return BaseToActual(reverse), false
 		end
 	end
 	local sum = 0
@@ -443,13 +465,7 @@ local function ResolveTime(srcId, dstId, slot)
 		end
 		sum = sum + leg
 	end
-	if HasFrequentFlier() then
-		sum = math.floor(sum / 1.2 + 0.5)
-		if sum < 1 then
-			sum = 1
-		end
-	end
-	return sum, true
+	return BaseToActual(sum), true
 end
 
 local function AddFlightTime(seconds, isEstimate)
