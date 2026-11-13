@@ -1,5 +1,6 @@
--- Direct flights for Classic Era (vanilla) that Data.lua does not have.
--- Path length. A measured route stays in Data.lua.
+-- Direct flights for Classic Era (vanilla).
+-- Path length when Data.lua has no time, or misses it by more than 2s.
+-- A pair here replaces the same pair in Data.lua.
 -- Build: 1.15.9.70576
 -- TAXI_YARDS_PER_SECOND: 30
 -- Generated: 2026-11-13

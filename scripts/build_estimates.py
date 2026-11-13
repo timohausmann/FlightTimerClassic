@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""Build the per-game direct-flight gaps on top of Data.lua.
+"""Build the per-game direct flights on top of Data.lua.
 
 Data.lua holds the measured routes, shared by both games. This script writes
-only the direct flights that table does not already have.
+direct flights that table does not have, and direct flights whose path length
+misses the stored time by more than DIRECT_REPLACE_SECONDS. A pair in the
+game file replaces the same pair in Data.lua.
 
 No arguments writes every game. --game forever or --game vanilla writes one.
 --from-legacy rebuilds Data.lua from scripts/data/DataLegacy.lua. That is not part of a
@@ -34,6 +36,10 @@ DROP_PREFIXES = (
     "Generic",
     "Programmer Isle",
 )
+
+# A stored direct flight is replaced when the path length misses it by more
+# than this. Same margin as the addon's correction nag.
+DIRECT_REPLACE_SECONDS = 2
 
 # Flown routes, no Frequent Flier. The result must land within 2 seconds,
 # the same margin the addon uses before it calls a time a correction.
@@ -311,27 +317,35 @@ def load_base(path):
     return edges
 
 
-def missing_directs(estimates, base):
-    """Direct estimates whose pair is not already measured."""
+def game_directs(estimates, base):
+    """Direct flights to write for one game.
+
+    A pair is included when Data.lua has no time for it, or when the path
+    length misses the stored time by more than DIRECT_REPLACE_SECONDS.
+    Replacements are (source, dest, stored, path seconds), sorted.
+    """
     extra = defaultdict(dict)
+    replaced = []
     for source, dests in estimates.items():
         known = base.get(source, {})
         for dest, seconds in dests.items():
-            if dest not in known:
+            stored = known.get(dest)
+            if stored is None:
                 extra[source][dest] = seconds
-    return extra
+            elif abs(seconds - stored) > DIRECT_REPLACE_SECONDS:
+                extra[source][dest] = seconds
+                replaced.append((source, dest, stored, seconds))
+    replaced.sort()
+    return extra, replaced
 
 
 def overlay(base, extra):
-    """Same fill the addon does: extra only where the base has no pair."""
+    """Same merge the addon does. A pair in the game file replaces Data.lua."""
     merged = defaultdict(dict)
     for source, dests in base.items():
         merged[source].update(dests)
     for source, dests in extra.items():
-        row = merged[source]
-        for dest, seconds in dests.items():
-            if dest not in row:
-                row[dest] = seconds
+        merged[source].update(dests)
     return merged
 
 
@@ -434,7 +448,7 @@ def write_legacy_base(page):
     header = [
         "-- Measured routes for both games, by flight-master node id.",
         "-- Converted once from scripts/data/DataLegacy.lua.",
-        "-- Direct flights with no measurement are in DataVanilla.lua or DataForever.lua.",
+        "-- A game file can replace a direct flight it times differently.",
     ]
     text = render(header, "FTCData", names, chosen)
     (ROOT / "Data.lua").write_bytes(text.encode("utf-8"))
@@ -455,18 +469,20 @@ def write_legacy_base(page):
 
 
 def build_game(page, game, base):
-    """Download one product and write the direct flights Data.lua does not have."""
+    """Download one product and write its direct-flight file."""
     build = read_build(page, game["product"])
     tables = download_tables(build, game["product"])
     records = load_nodes(tables["TaxiNodes"])
     names = {node_id: name for node_id, (name, _flags) in records.items()}
     paths = load_paths(tables["TaxiPath"], names)
     estimates = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
-    extra = missing_directs(estimates, base)
+    extra, replaced = game_directs(estimates, base)
     merged = overlay(base, extra)
     header = [
-        "-- Direct flights for %s (%s) that Data.lua does not have." % (game["title"], game["name"]),
-        "-- Path length. A measured route stays in Data.lua.",
+        "-- Direct flights for %s (%s)." % (game["title"], game["name"]),
+        "-- Path length when Data.lua has no time, or misses it by more than %ds."
+        % DIRECT_REPLACE_SECONDS,
+        "-- A pair here replaces the same pair in Data.lua.",
         "-- Build: %s" % build,
         "-- TAXI_YARDS_PER_SECOND: %d" % game["yards_per_second"],
         "-- Generated: %s" % date.today().isoformat(),
@@ -476,7 +492,17 @@ def build_game(page, game, base):
     problems = validate(merged, text, game["required_edges"])
     report(game, build, merged)
     extra_count = sum(len(dests) for dests in extra.values())
-    print("Extra direct flights: %d" % extra_count)
+    print("Extra direct flights: %d (%d replace Data.lua)" % (extra_count, len(replaced)))
+    for source, dest, stored, seconds in replaced:
+        print(
+            "  %s -> %s: Data.lua %ds, path %ds"
+            % (
+                names.get(source, str(source)).split(",")[0],
+                names.get(dest, str(dest)).split(",")[0],
+                stored,
+                seconds,
+            )
+        )
     if problems:
         for problem in problems:
             print(problem, file=sys.stderr)

@@ -1,6 +1,6 @@
 -- Measured routes for both games, by flight-master node id.
 -- Converted once from 0.6.0 Data.lua.
--- Direct flights with no measurement are in DataVanilla.lua or DataForever.lua.
+-- A game file can replace a direct flight it times differently.
 FTCData = {
     [2] = { -- Stormwind, Elwynn
         [4] = 78, -- Sentinel Hill, Westfall

@@ -1,10 +1,14 @@
--- Direct flights for WoW Forever (forever) that Data.lua does not have.
--- Path length. A measured route stays in Data.lua.
+-- Direct flights for WoW Forever (forever).
+-- Path length when Data.lua has no time, or misses it by more than 2s.
+-- A pair here replaces the same pair in Data.lua.
 -- Build: 1.60.1.70938
 -- TAXI_YARDS_PER_SECOND: 30
 -- Generated: 2026-11-13
 -- python3 scripts/build_estimates.py --game forever
 FTCExtra = {
+  [4] = { -- Sentinel Hill, Westfall
+    [2] = 81, -- Stormwind, Elwynn
+  },
   [5] = { -- Lakeshire, Redridge
     [3276] = 132, -- Farholde Keep, Riverglades
   },
@@ -12,6 +16,7 @@ FTCExtra = {
     [3276] = 184, -- Farholde Keep, Riverglades
   },
   [11] = { -- Undercity, Tirisfal
+    [21] = 495, -- Kargath, Badlands
     [60] = 16, -- Frostwolf Keep, Alterac Valley
   },
   [17] = { -- Hammerfall, Arathi

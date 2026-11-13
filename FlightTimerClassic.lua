@@ -773,7 +773,8 @@ function FlightFrame:ADDON_LOADED(loaded)
     self:UnregisterEvent("ADDON_LOADED")
 end
 
--- Data.lua is the measured base. The game file only has direct flights it lacks.
+-- Data.lua is the measured base. The game file fills a missing pair and
+-- replaces a direct flight whose path length misses that base by more than 2s.
 local function MergeExtra()
     if type(FTCData) ~= "table" or type(FTCExtra) ~= "table" then
         return
@@ -786,7 +787,7 @@ local function MergeExtra()
                 FTCData[src] = row
             end
             for dst, seconds in pairs(dests) do
-                if row[dst] == nil and type(seconds) == "number" then
+                if type(seconds) == "number" then
                     row[dst] = seconds
                 end
             end
