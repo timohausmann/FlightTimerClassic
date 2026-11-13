@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Build the per-game direct flights on top of Data.lua.
 
-Data.lua holds the measured routes, shared by both games. This script writes
-direct flights that table does not have, and direct flights whose path length
-misses the stored time by more than DIRECT_REPLACE_SECONDS. A pair in the
-game file replaces the same pair in Data.lua.
+Data.lua holds the measured routes, shared by both games. A pair DataLegacy
+recorded twice, once per faction, is left out of that table. This script does
+not fill those pairs. It writes direct flights the table does not have, and
+direct flights whose path length misses the stored time by more than
+DIRECT_REPLACE_SECONDS. A pair in the game file replaces the same pair in
+Data.lua.
 
 No arguments writes every game. --game forever or --game vanilla writes one.
 --from-legacy rebuilds Data.lua from scripts/data/DataLegacy.lua. That is not part of a
@@ -12,7 +14,6 @@ normal run.
 """
 
 import csv
-import heapq
 import html
 import io
 import math
@@ -255,25 +256,6 @@ def load_estimates(path, paths, yards_per_second):
     return edges
 
 
-def shortest_route(edges, src, dst):
-    """(seconds, hops) of the quickest sum of direct legs, or None."""
-    best = {src: (0, 0)}
-    heap = [(0, src)]
-    while heap:
-        seconds, node = heapq.heappop(heap)
-        if seconds != best[node][0]:
-            continue
-        if node == dst and node != src:
-            return best[node]
-        for nxt, leg in edges.get(node, {}).items():
-            cand = seconds + leg
-            prev = best.get(nxt)
-            if prev is None or cand < prev[0]:
-                best[nxt] = (cand, best[node][1] + 1)
-                heapq.heappush(heap, (cand, nxt))
-    return None
-
-
 def lua_comment(name):
     cleaned = "".join(ch if ch >= " " else " " for ch in name).strip()
     return cleaned
@@ -317,11 +299,13 @@ def load_base(path):
     return edges
 
 
-def game_directs(estimates, base):
+def game_directs(estimates, base, omitted):
     """Direct flights to write for one game.
 
     A pair is included when Data.lua has no time for it, or when the path
     length misses the stored time by more than DIRECT_REPLACE_SECONDS.
+    Pairs DataLegacy measured twice are left out, so the addon can sum the
+    stops of the route actually being flown.
     Replacements are (source, dest, stored, path seconds), sorted.
     """
     extra = defaultdict(dict)
@@ -329,6 +313,8 @@ def game_directs(estimates, base):
     for source, dests in estimates.items():
         known = base.get(source, {})
         for dest, seconds in dests.items():
+            if (source, dest) in omitted:
+                continue
             stored = known.get(dest)
             if stored is None:
                 extra[source][dest] = seconds
@@ -397,32 +383,26 @@ def selected_games(argv):
     )
 
 
-def choose_conflicts(candidates, estimates):
-    """One duration per pair. Two faction times: keep the one nearer the leg sum."""
+def split_measured(candidates):
+    """One duration per pair. Two faction times: leave the pair out.
+
+    A neutral master is one node, so both factions can store that same pair.
+    When the times differ, the routes differ. One stored number would be the
+    wrong route for one faction. The addon then sums the live stops.
+    """
     chosen = defaultdict(dict)
-    conflicts = []
+    omitted = []
     for src, dst in sorted(candidates):
         times = sorted(set(candidates[(src, dst)]))
         if len(times) == 1:
             chosen[src][dst] = times[0]
             continue
-        found = shortest_route(estimates, src, dst)
-        if found is None:
-            # No path to judge by. The shorter stored time is the one that
-            # agrees with the other measured routes, which run under the sum.
-            pick = times[0]
-        else:
-            total = found[0]
-            pick = min(times, key=lambda seconds: (abs(seconds - total), seconds))
-        chosen[src][dst] = pick
-        conflicts.append((src, dst, times, pick, None if found is None else found[0]))
-    return chosen, conflicts
+        omitted.append((src, dst, times))
+    return chosen, omitted
 
 
-def measured_from_legacy(records, estimates):
+def measured_from_legacy(records):
     """DataLegacy.lua hashes as node-id pairs. Needs the taxi nodes for names."""
-    import legacy_nodes
-
     names = {node_id: name for node_id, (name, _flags) in records.items()}
     routes = legacy_nodes.load_routes(ROOT / "scripts" / "data" / "DataLegacy.lua")
     bound = legacy_nodes.node_ids_for(routes, records)
@@ -431,8 +411,21 @@ def measured_from_legacy(records, estimates):
     for (src, dst), times in candidates.items():
         if src in names and dst in names:
             present[(src, dst)] = times
-    chosen, conflicts = choose_conflicts(present, estimates)
-    return names, chosen, conflicts
+    chosen, omitted = split_measured(present)
+    return names, chosen, omitted
+
+
+def print_omitted(names, omitted):
+    """Name the pairs a faction collision removed."""
+    for src, dst, times in omitted:
+        print(
+            "Left out %s -> %s: %s"
+            % (
+                names.get(src, str(src)).split(",")[0],
+                names.get(dst, str(dst)).split(",")[0],
+                ", ".join("%ds" % seconds for seconds in times),
+            )
+        )
 
 
 def write_legacy_base(page):
@@ -441,30 +434,18 @@ def write_legacy_base(page):
     build = read_build(page, game["product"])
     tables = download_tables(build, game["product"])
     records = load_nodes(tables["TaxiNodes"])
-    names = {node_id: name for node_id, (name, _flags) in records.items()}
-    paths = load_paths(tables["TaxiPath"], names)
-    estimates = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
-    names, chosen, conflicts = measured_from_legacy(records, estimates)
+    names, chosen, omitted = measured_from_legacy(records)
     header = [
         "-- Measured routes for both games, by flight-master node id.",
         "-- Converted once from scripts/data/DataLegacy.lua.",
         "-- A game file can replace a direct flight it times differently.",
+        "-- A pair with two faction times is left out.",
     ]
     text = render(header, "FTCData", names, chosen)
     (ROOT / "Data.lua").write_bytes(text.encode("utf-8"))
     count = sum(len(dests) for dests in chosen.values())
     print("Wrote Data.lua (%d routes)" % count)
-    for src, dst, times, pick, total in conflicts:
-        print(
-            "Two times for %s -> %s: %s, chose %ds (legs %s)"
-            % (
-                names.get(src, str(src)).split(",")[0],
-                names.get(dst, str(dst)).split(",")[0],
-                ", ".join("%ds" % seconds for seconds in times),
-                pick,
-                "none" if total is None else "%ds" % total,
-            )
-        )
+    print_omitted(names, omitted)
     return True
 
 
@@ -476,13 +457,16 @@ def build_game(page, game, base):
     names = {node_id: name for node_id, (name, _flags) in records.items()}
     paths = load_paths(tables["TaxiPath"], names)
     estimates = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
-    extra, replaced = game_directs(estimates, base)
+    _legacy_names, _chosen, omitted_rows = measured_from_legacy(records)
+    omitted = {(src, dst) for src, dst, _times in omitted_rows}
+    extra, replaced = game_directs(estimates, base, omitted)
     merged = overlay(base, extra)
     header = [
         "-- Direct flights for %s (%s)." % (game["title"], game["name"]),
         "-- Path length when Data.lua has no time, or misses it by more than %ds."
         % DIRECT_REPLACE_SECONDS,
         "-- A pair here replaces the same pair in Data.lua.",
+        "-- Faction collisions from DataLegacy are left out.",
         "-- Build: %s" % build,
         "-- TAXI_YARDS_PER_SECOND: %d" % game["yards_per_second"],
         "-- Generated: %s" % date.today().isoformat(),
@@ -493,6 +477,7 @@ def build_game(page, game, base):
     report(game, build, merged)
     extra_count = sum(len(dests) for dests in extra.values())
     print("Extra direct flights: %d (%d replace Data.lua)" % (extra_count, len(replaced)))
+    print_omitted(names, omitted_rows)
     for source, dest, stored, seconds in replaced:
         print(
             "  %s -> %s: Data.lua %ds, path %ds"

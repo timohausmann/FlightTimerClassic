@@ -1,6 +1,7 @@
 -- Measured routes for both games, by flight-master node id.
 -- Converted once from 0.6.0 Data.lua.
 -- A game file can replace a direct flight it times differently.
+-- A pair with two faction times is left out.
 FTCData = {
     [2] = { -- Stormwind, Elwynn
         [4] = 78, -- Sentinel Hill, Westfall
@@ -897,8 +898,7 @@ FTCData = {
         [69] = 766, -- Moonglade
         [72] = 100, -- Cenarion Hold, Silithus
         [73] = 94, -- Cenarion Hold, Silithus
-        [77] = 336, -- Camp Taurajo, The Barrens
-        [80] = 364 -- Ratchet, The Barrens
+        [77] = 336 -- Camp Taurajo, The Barrens
     },
     [80] = { -- Ratchet, The Barrens
         [22] = 250, -- Thunder Bluff, Mulgore
@@ -927,7 +927,6 @@ FTCData = {
         [65] = 415, -- Talonbranch Glade, Felwood
         [72] = 450, -- Cenarion Hold, Silithus
         [73] = 459, -- Cenarion Hold, Silithus
-        [77] = 158, -- Camp Taurajo, The Barrens
-        [79] = 366 -- Marshal's Refuge, Un'Goro Crater
+        [77] = 158 -- Camp Taurajo, The Barrens
     }
 }
