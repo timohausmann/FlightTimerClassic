@@ -63,10 +63,16 @@ local function ShortName(name)
     return strmatch(name, "[^,]+")
 end
 
-local function consoleLog(text, important)
-    if important or not FTCConfig or not FTCConfig.mute then
-        print(format("|cff00ccff[FTC]|cff66ddff %s", text))
+-- kind "login" is the Ready line. kind "report" is the landing summary.
+-- Anything else always prints: command replies, a cancelled flight, an unknown route.
+local function consoleLog(text, kind)
+    if kind == "login" and FTCConfig and FTCConfig.muteLogin then
+        return
     end
+    if kind == "report" and FTCConfig and FTCConfig.muteReport then
+        return
+    end
+    print(format("|cff00ccff[FTC]|cff66ddff %s", text))
 end
 
 -- A name or a slash command, in the lighter blue. The line color comes back after it.
@@ -119,19 +125,13 @@ local function OnTaxi()
     return not not onTaxi
 end
 
--- Cancel the flight watch. The click time or the air time is still set here, so it can be logged.
-local function StopFlightWatch(reason)
+-- Cancel the flight watch.
+local function StopFlightWatch()
     if not flightTicker then
         return
     end
-    local began = pendingSince or startTime
-    local waited = began and (GetTime() - began) or 0
     flightTicker:Cancel()
     flightTicker = nil
-    -- English on purpose: this line only shows with /ftc debug.
-    if FTCConfig and FTCConfig.debug then
-        consoleLog(format("Flight watch stopped after %.1fs (%s).", waited, reason))
-    end
 end
 
 local function BeginFlightClock()
@@ -146,8 +146,8 @@ local function BeginFlightClock()
 end
 
 -- Drop a click that never took off. Keep the flight master node; the map is still open.
-local function AbortTakeoff(reason)
-    StopFlightWatch(reason or "aborted")
+local function AbortTakeoff()
+    StopFlightWatch()
     pendingSince = nil
     confirmedTaxi = nil
     startTime = nil
@@ -161,7 +161,7 @@ local function AbortTakeoff(reason)
 end
 
 local function ResetFlight()
-    StopFlightWatch("reset")
+    StopFlightWatch()
     flightStarted = false
     pendingSince = nil
     confirmedTaxi = nil
@@ -189,12 +189,13 @@ local function FinishFlight()
     local toName = Hi(endName or UNKNOWN)
     local taken = Hi(getFormattedTime(t))
 
+    -- The flight report: a new route, a corrected time, or a normal arrival.
     if endTime == nil then
-        consoleLog(format(L.NewData, fromName, toName, taken))
+        consoleLog(format(L.NewData, fromName, toName, taken), "report")
     elseif abs(t - estimatedT) > 2 then -- allow 2 seconds error margin before nagging around
-        consoleLog(format(L.Correction, fromName, toName, taken, Hi(getFormattedTime(estimatedT))))
+        consoleLog(format(L.Correction, fromName, toName, taken, Hi(getFormattedTime(estimatedT))), "report")
     else
-        consoleLog(format(L.Arrived, toName, taken))
+        consoleLog(format(L.Arrived, toName, taken), "report")
     end
 
     -- Node ids, stored with no Frequent Flier.
@@ -318,7 +319,7 @@ local function WatchFlight()
         if onTaxi ~= false then
             BeginFlightClock()
         elseif GetTime() - pendingSince > TAKEOFF_WAIT then
-            AbortTakeoff("still on the ground")
+            AbortTakeoff()
             return
         end
     end
@@ -338,7 +339,7 @@ local function WatchFlight()
 end
 
 local function StartFlightWatch()
-    -- The caller already stopped the previous watch, while its start time was still set.
+    -- TakeTaxiNode already stops a previous watch. Cancel here if one is still running.
     if flightTicker then
         flightTicker:Cancel()
         flightTicker = nil
@@ -350,9 +351,10 @@ local function StartFlightWatch()
 end
 
 local function CancelFlight()
+    -- A cancelled flight stays visible when the flight report is muted.
     consoleLog(L.FlightCancelled)
     -- Nothing to save on landing: the clock is cleared before control returns.
-    AbortTakeoff("cancelled")
+    AbortTakeoff()
 end
 
 -- The map the player is looking at. GetTaxiMapID stays on the opener's continent.
@@ -460,7 +462,9 @@ function ActualToBase(seconds)
     return math.floor(seconds * 1.2 + 0.5)
 end
 
--- Saved total for this pair first. Else add FTCData edges. A saved total is never one hop.
+-- This character's saved total first. Else a stored pair: a measured route from
+-- Data.lua, or one estimated leg. Else add the legs of the route the game will fly.
+-- Summing a measured route would put the skipped landings back.
 -- The perk is applied on the way out.
 local function ResolveTime(srcId, dstId, slot)
     if not srcId or not dstId then
@@ -470,6 +474,10 @@ local function ResolveTime(srcId, dstId, slot)
     -- A saved 0 is a failed click, not a flight. Fall through to the estimate.
     if type(measured) == "number" and measured > 0 then
         return BaseToActual(measured), false
+    end
+    local known = defaultTimes[srcId] and defaultTimes[srcId][dstId]
+    if type(known) == "number" and known > 0 then
+        return BaseToActual(known), true
     end
     local ids = RouteNodeIDs(slot, srcId, dstId)
     if not ids then
@@ -548,7 +556,7 @@ local function WarnMissingPins()
     elseif TaxiFrame then
         which = "TaxiFrame"
     end
-    consoleLog(format(L.PinsUnavailable, which), true)
+    consoleLog(format(L.PinsUnavailable, which))
 end
 
 -- One tooltip hook per pin. EnumerateActive yields the pin as the key.
@@ -687,6 +695,19 @@ end)
 Slash Commands
 --]]
 
+-- One mute line. %s in the text is the command that flips this setting.
+local function LogMuteSetting(muted, onText, offText, command)
+    consoleLog(format(muted and offText or onText, Hi(command)))
+end
+
+local function LogMuteLogin()
+    LogMuteSetting(FTCConfig.muteLogin, L.MuteLoginOn, L.MuteLoginOff, "/ftc mute login")
+end
+
+local function LogMuteReport()
+    LogMuteSetting(FTCConfig.muteReport, L.MuteReportOn, L.MuteReportOff, "/ftc mute report")
+end
+
 local function FTCCommands(msg, editbox)
 
     local cmds = {
@@ -694,18 +715,35 @@ local function FTCCommands(msg, editbox)
             FTCConfig.debug = not FTCConfig.debug
 
             if FTCConfig.debug then
-                consoleLog(format(L.DebugOn, Hi("/ftc debug")), true)
+                consoleLog(format(L.DebugOn, Hi("/ftc debug")))
             else
-                consoleLog(format(L.DebugOff, Hi("/ftc debug")), true)
+                consoleLog(format(L.DebugOff, Hi("/ftc debug")))
             end
         end,
-        mute = function()
-            FTCConfig.mute = not FTCConfig.mute
-
-            if FTCConfig.mute then
-                consoleLog(format(L.MuteOn, Hi("/ftc mute")), true)
+        -- No argument prints both. login and report toggle one. all and none set both.
+        -- Returns false when the word is not one of those, so the caller can show help.
+        mute = function(arg)
+            if arg == "" then
+                LogMuteLogin()
+                LogMuteReport()
+            elseif arg == "login" then
+                FTCConfig.muteLogin = not FTCConfig.muteLogin
+                LogMuteLogin()
+            elseif arg == "report" then
+                FTCConfig.muteReport = not FTCConfig.muteReport
+                LogMuteReport()
+            elseif arg == "all" then
+                FTCConfig.muteLogin = true
+                FTCConfig.muteReport = true
+                LogMuteLogin()
+                LogMuteReport()
+            elseif arg == "none" then
+                FTCConfig.muteLogin = false
+                FTCConfig.muteReport = false
+                LogMuteLogin()
+                LogMuteReport()
             else
-                consoleLog(format(L.MuteOff, Hi("/ftc mute")), true)
+                return false
             end
         end,
         show = function()
@@ -715,36 +753,47 @@ local function FTCCommands(msg, editbox)
                 if not startTime and not pendingSince then
                     FlightFrame.time:SetText(getFormattedTime(90))
                 end
-                consoleLog(format(L.TimerShown, Hi("/ftc hide")), true)
+                consoleLog(format(L.TimerShown, Hi("/ftc hide")))
             else
-                consoleLog(format(L.TimerAlreadyShown, Hi("/ftc hide")), true)
+                consoleLog(format(L.TimerAlreadyShown, Hi("/ftc hide")))
             end
         end,
         hide = function()
             if FlightFrame:IsShown() then
                 FlightFrame:Hide()
-                consoleLog(format(L.TimerHidden, Hi("/ftc show")), true)
+                consoleLog(format(L.TimerHidden, Hi("/ftc show")))
             else
-                consoleLog(format(L.TimerAlreadyHidden, Hi("/ftc show")), true)
+                consoleLog(format(L.TimerAlreadyHidden, Hi("/ftc show")))
             end
         end,
         help = function()
-            consoleLog(format(L.HelpShow, Hi("/ftc show")), true)
-            consoleLog(format(L.HelpHide, Hi("/ftc hide")), true)
-            consoleLog(format(L.HelpMute, Hi("/ftc mute")), true)
-            consoleLog(format(L.HelpDebug, Hi("/ftc debug")), true)
-            consoleLog(format(L.HelpHelp, Hi("/ftc help")), true)
-            consoleLog(L.HelpPaste, true)
+            consoleLog(format(L.HelpShow, Hi("/ftc show")))
+            consoleLog(format(L.HelpHide, Hi("/ftc hide")))
+            consoleLog(format(L.HelpMute, Hi("/ftc mute")))
+            consoleLog(format(L.HelpMuteLogin, Hi("/ftc mute login")))
+            consoleLog(format(L.HelpMuteReport, Hi("/ftc mute report")))
+            consoleLog(format(L.HelpMuteAll, Hi("/ftc mute all")))
+            consoleLog(format(L.HelpMuteNone, Hi("/ftc mute none")))
+            consoleLog(format(L.HelpDebug, Hi("/ftc debug")))
+            consoleLog(format(L.HelpHelp, Hi("/ftc help")))
+            consoleLog(L.HelpPaste)
         end
     }
 
-    local func = cmds[msg]
-    if (func) then
-        func()
-    else
-        consoleLog(format(L.UnknownCommand, Hi(format("%q", msg))))
-        cmds.help()
+    -- First word selects the command. Only mute reads a second word.
+    local typed = strtrim(msg or "")
+    local lowered = strlower(typed)
+    local cmd, arg = strmatch(lowered, "^(%S+)%s*(.*)$")
+    cmd = cmd or ""
+    arg = arg or ""
+    local func = cmds[cmd]
+    -- A second word on any other command, or a third word, is not a command.
+    local muteArg = cmd == "mute" and not strfind(arg, "%s")
+    if func and (arg == "" or muteArg) and func(arg) ~= false then
+        return
     end
+    consoleLog(format(L.UnknownCommand, Hi(format("%q", typed))))
+    cmds.help()
 end
 
 SLASH_FLIGHTIMERCLASSIC1 = '/ftc'
@@ -765,12 +814,45 @@ function FlightFrame:ADDON_LOADED(loaded)
     if FTCConfig.debug == nil then
         FTCConfig.debug = false
     end
-    if FTCConfig.mute == nil then
-        FTCConfig.mute = false
+    -- Older versions stored one mute flag. On hid the login line and the flight report.
+    if FTCConfig.muteLogin == nil and FTCConfig.muteReport == nil then
+        local muted = not not FTCConfig.mute
+        FTCConfig.muteLogin = muted
+        FTCConfig.muteReport = muted
     end
+    if FTCConfig.muteLogin == nil then
+        FTCConfig.muteLogin = false
+    end
+    if FTCConfig.muteReport == nil then
+        FTCConfig.muteReport = false
+    end
+    -- Drop the old flag so a later load does not copy it over these two.
+    FTCConfig.mute = nil
     customTimes = FTCCustomData
 
     self:UnregisterEvent("ADDON_LOADED")
+end
+
+-- Data.lua is the measured base. The game file fills a missing pair and
+-- replaces a direct flight whose path length misses that base by more than 2s.
+local function MergeExtra()
+    if type(FTCData) ~= "table" or type(FTCExtra) ~= "table" then
+        return
+    end
+    for src, dests in pairs(FTCExtra) do
+        if type(dests) == "table" then
+            local row = FTCData[src]
+            if type(row) ~= "table" then
+                row = {}
+                FTCData[src] = row
+            end
+            for dst, seconds in pairs(dests) do
+                if type(seconds) == "number" then
+                    row[dst] = seconds
+                end
+            end
+        end
+    end
 end
 
 --[[
@@ -778,11 +860,13 @@ PLAYER_LOGIN
 --]]
 
 function FlightFrame:PLAYER_LOGIN()
+    MergeExtra()
     defaultTimes = FTCData or {}
 
     if FTCData then
-        consoleLog(format(L.Ready, Hi("/ftc help")))
+        consoleLog(format(L.Ready, Hi("/ftc help")), "login")
     else
+        -- Missing data is an error, not the login greeting.
         consoleLog(format(L.NoData, Hi("/ftc help")))
     end
 end
@@ -822,6 +906,11 @@ TAXIMAP_OPENED
 local bindSerial = 0
 
 function FlightFrame:TAXIMAP_OPENED()
+    -- 0.6 pin hashes on this continent become node ids before any tooltip reads them.
+    local moved = ns.MigrateLegacyTimes and ns.MigrateLegacyTimes()
+    if type(moved) == "number" and FTCConfig and FTCConfig.debug then
+        consoleLog(format("Legacy flight times moved: %d.", moved))
+    end
     -- Pins are drawn after this event. Try now, then twice on the following frames.
     bindSerial = bindSerial + 1
     local serial = bindSerial
@@ -851,8 +940,8 @@ TakeTaxiNode
 
 hooksecurefunc("TakeTaxiNode", function(slot)
 
-    -- A second click replaces a wait that has not left the ground. Log that wait first.
-    StopFlightWatch("restarted")
+    -- A second click replaces a wait that has not left the ground.
+    StopFlightWatch()
     flightStarted = true
     if not currentId then
         ReadCurrentNode()
@@ -866,6 +955,7 @@ hooksecurefunc("TakeTaxiNode", function(slot)
     estimatedT, timeIsEstimate = ResolveTime(currentId, endId, slot)
 
     if estimatedT == nil then
+        -- An unmeasured route stays visible when the flight report is muted.
         consoleLog(format(L.UnknownFlight, Hi(currentName or UNKNOWN), Hi(endName or UNKNOWN)))
     end
 
