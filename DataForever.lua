@@ -1,8 +1,9 @@
--- Direct flight estimates for WoW Forever. Measured routes live in FTCCustomData.
+-- Direct flight estimates for WoW Forever (forever).
+-- Measured routes live in FTCCustomData.
 -- Build: 1.60.1.70888
 -- TAXI_YARDS_PER_SECOND: 30
--- Generated: 2026-11-11
--- python3 scripts/build_estimates.py
+-- Generated: 2026-11-12
+-- python3 scripts/build_estimates.py --game forever
 FTCData = {
   [2] = { -- Stormwind, Elwynn
     [4] = 78, -- Sentinel Hill, Westfall

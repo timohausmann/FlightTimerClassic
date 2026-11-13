@@ -1,6 +1,6 @@
 # Flight Timer Classic
 
-Record and display flight durations for WoW Forever.
+Record and display flight durations for WoW Forever and Classic Era.
 
 The time shown for a route is an estimate from the path length until a character has flown that route.
 

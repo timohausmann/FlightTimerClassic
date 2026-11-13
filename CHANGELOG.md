@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Update code and estimates for Classic Era (1.15.9).
+- Convert previous Classic Era data when opening the continent's flight map.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added
@@ -18,8 +23,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
-- Targets the WoW Forever interface (16001).
-- Routes are stored and looked up by flight-master node id, for both factions. Saved times from 0.6 are not reused.
+- Targets WoW Forever (16001) and Classic Era (11509). Forever estimates live in DataForever.lua.
+- Routes are stored and looked up by flight-master node id, for both factions. On Forever, a 0.6 save is left unused.
 - The flight map tooltip says "Estimated time" or "Recorded time".
 - The clock starts when the character is on the taxi, not when the flight master is clicked.
 - `/ftc show` shows a static placeholder time.

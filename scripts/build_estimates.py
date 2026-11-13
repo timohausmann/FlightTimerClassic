@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
-"""Build Data.lua from the Forever taxi tables on wago.tools.
+"""Build node-id flight estimates from the taxi tables on wago.tools.
 
+No arguments writes every game. --game forever or --game vanilla writes one.
 Direct edges only. Measured flights stay in FTCCustomData.
 """
 
@@ -16,9 +17,6 @@ from collections import defaultdict
 from datetime import date
 from pathlib import Path
 
-# Flight speed.
-TAXI_YARDS_PER_SECOND = 30
-
 # TaxiPathNode.Flags bit that means this waypoint's Delay is part of the flight.
 DELAY_FLAG = 2
 
@@ -30,10 +28,11 @@ DROP_PREFIXES = (
     "Programmer Isle",
 )
 
-# Flown direct routes, no Frequent Flier (2026-11-11). The estimate must land
-# within 2 seconds, the same margin the addon uses before it calls a time a correction.
+# Flown direct routes, no Frequent Flier. The estimate must land within 2 seconds,
+# the same margin the addon uses before it calls a time a correction.
 # (source, dest, min seconds, max seconds)
-REQUIRED_EDGES = (
+# Vanilla stays empty until a Classic Era flight is measured.
+FOREVER_EDGES = (
     (2, 4, 77, 81),  # Stormwind -> Sentinel Hill, flew 79
     (2, 5, 112, 116),  # Stormwind -> Lakeshire, flew 114
     (2, 6, 258, 262),  # Stormwind -> Ironforge, flew 260
@@ -51,7 +50,26 @@ BROWSER_UA = (
 
 ROOT = Path(__file__).resolve().parents[1]
 CACHE_DIR = ROOT / "scripts" / "data" / "wago"
-DATA_LUA = ROOT / "Data.lua"
+
+# One row per TOC game type. Output names match Data<Game>.lua.
+GAMES = (
+    {
+        "name": "forever",
+        "title": "WoW Forever",
+        "product": "wowf",
+        "output": ROOT / "DataForever.lua",
+        "yards_per_second": 30,
+        "required_edges": FOREVER_EDGES,
+    },
+    {
+        "name": "vanilla",
+        "title": "Classic Era",
+        "product": "wow_classic_era",
+        "output": ROOT / "DataVanilla.lua",
+        "yards_per_second": 30,
+        "required_edges": (),
+    },
+)
 
 TABLES = ("TaxiNodes", "TaxiPath", "TaxiPathNode")
 
@@ -74,25 +92,32 @@ def fetch_bytes(url):
     raise last_error
 
 
-def read_forever_build():
-    """Build id from the Forever (wowf) row on the wago.tools front page."""
+def read_builds_page():
+    """Front page text. Each game's current build is a product/version pair."""
     page = fetch_bytes("https://wago.tools/").decode("utf-8", "replace")
-    text = html.unescape(page)
+    return html.unescape(page)
+
+
+def read_build(page, product):
+    """Build id for one wago product, from the front page."""
     match = re.search(
-        r'"product"\s*:\s*"wowf"\s*,\s*"version"\s*:\s*"(\d+\.\d+\.\d+\.\d+)"',
-        text,
+        r'"product"\s*:\s*"%s"\s*,\s*"version"\s*:\s*"(\d+\.\d+\.\d+\.\d+)"'
+        % re.escape(product),
+        page,
     )
     if not match:
-        raise SystemExit("Forever build (wowf) was not on https://wago.tools/")
+        raise SystemExit("Build for %s was not on https://wago.tools/" % product)
     return match.group(1)
 
 
-def download_tables(build):
-    CACHE_DIR.mkdir(parents=True, exist_ok=True)
+def download_tables(build, product):
+    """Cache CSVs per product so two games do not overwrite each other."""
+    cache = CACHE_DIR / product
+    cache.mkdir(parents=True, exist_ok=True)
     paths = {}
     for name in TABLES:
         url = "https://wago.tools/db2/%s/csv?build=%s" % (name, build)
-        dest = CACHE_DIR / ("%s.csv" % name)
+        dest = cache / ("%s.csv" % name)
         dest.write_bytes(fetch_bytes(url))
         paths[name] = dest
     return paths
@@ -147,7 +172,7 @@ def load_paths(path, names):
     return paths
 
 
-def estimate_seconds(points):
+def estimate_seconds(points, yards_per_second):
     """Seconds for one path, or None when the path leaves its continent.
 
     points are (continent, x, y, z, flags, delay) sorted by NodeIndex.
@@ -163,7 +188,7 @@ def estimate_seconds(points):
             dx = x - previous[1]
             dy = y - previous[2]
             dz = z - previous[3]
-            elapsed += math.sqrt(dx * dx + dy * dy + dz * dz) / TAXI_YARDS_PER_SECOND
+            elapsed += math.sqrt(dx * dx + dy * dy + dz * dz) / yards_per_second
         if flags & DELAY_FLAG:
             elapsed += delay
         previous = (continent, x, y, z)
@@ -174,7 +199,7 @@ def estimate_seconds(points):
     return rounded
 
 
-def load_estimates(path, paths):
+def load_estimates(path, paths, yards_per_second):
     """(source, dest) -> seconds. Same pair: keep the path with the most points."""
     grouped = defaultdict(list)
     for row in read_csv(path):
@@ -197,7 +222,7 @@ def load_estimates(path, paths):
     for path_id in sorted(grouped):
         rows = sorted(grouped[path_id])
         points = [row[1:] for row in rows]
-        seconds = estimate_seconds(points)
+        seconds = estimate_seconds(points, yards_per_second)
         if seconds is None:
             continue
         source, dest = paths[path_id]
@@ -216,13 +241,14 @@ def lua_comment(name):
     return cleaned
 
 
-def render(build, names, edges):
+def render(game, build, names, edges):
     lines = [
-        "-- Direct flight estimates for WoW Forever. Measured routes live in FTCCustomData.",
+        "-- Direct flight estimates for %s (%s)." % (game["title"], game["name"]),
+        "-- Measured routes live in FTCCustomData.",
         "-- Build: %s" % build,
-        "-- TAXI_YARDS_PER_SECOND: %d" % TAXI_YARDS_PER_SECOND,
+        "-- TAXI_YARDS_PER_SECOND: %d" % game["yards_per_second"],
         "-- Generated: %s" % date.today().isoformat(),
-        "-- python3 scripts/build_estimates.py",
+        "-- python3 scripts/build_estimates.py --game %s" % game["name"],
         "FTCData = {",
     ]
     for source in sorted(edges):
@@ -238,9 +264,9 @@ def render(build, names, edges):
     return "\n".join(lines)
 
 
-def validate(edges, text):
+def validate(edges, text, required_edges):
     problems = []
-    for source, dest, low, high in REQUIRED_EDGES:
+    for source, dest, low, high in required_edges:
         seconds = edges.get(source, {}).get(dest)
         if seconds is None:
             problems.append("missing edge %d -> %d" % (source, dest))
@@ -254,11 +280,12 @@ def validate(edges, text):
     return problems
 
 
-def report(build, edges):
+def report(game, build, edges):
     count = sum(len(dests) for dests in edges.values())
+    print("%s (%s)" % (game["title"], game["name"]))
     print("Build: %s" % build)
     print("Edges: %d" % count)
-    for source, dest, _low, _high in REQUIRED_EDGES:
+    for source, dest, _low, _high in game["required_edges"]:
         seconds = edges.get(source, {}).get(dest)
         if seconds is None:
             print("%d -> %d: missing" % (source, dest))
@@ -266,23 +293,51 @@ def report(build, edges):
             print("%d -> %d: %ds" % (source, dest, seconds))
 
 
-def main():
-    build = read_forever_build()
-    tables = download_tables(build)
+def game_by_name(name):
+    for game in GAMES:
+        if game["name"] == name:
+            return game
+    known = ", ".join(game["name"] for game in GAMES)
+    raise SystemExit("Unknown game %r. Choose one of: %s" % (name, known))
+
+
+def selected_games(argv):
+    """No flag writes every game. --game <name> writes that one."""
+    if len(argv) == 1:
+        return GAMES
+    if len(argv) == 3 and argv[1] == "--game":
+        return (game_by_name(argv[2]),)
+    raise SystemExit("Usage: python3 scripts/build_estimates.py [--game forever|vanilla]")
+
+
+def build_game(page, game):
+    """Download one product and write its data file. False when a check fails."""
+    build = read_build(page, game["product"])
+    tables = download_tables(build, game["product"])
     names = load_nodes(tables["TaxiNodes"])
     paths = load_paths(tables["TaxiPath"], names)
-    edges = load_estimates(tables["TaxiPathNode"], paths)
-    text = render(build, names, edges)
-    problems = validate(edges, text)
-    report(build, edges)
+    edges = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
+    text = render(game, build, names, edges)
+    problems = validate(edges, text, game["required_edges"])
+    report(game, build, edges)
     if problems:
         for problem in problems:
             print(problem, file=sys.stderr)
-        return 1
-    DATA_LUA.write_bytes(text.encode("utf-8"))
-    print("Wrote %s" % DATA_LUA.name)
-    return 0
+        return False
+    game["output"].write_bytes(text.encode("utf-8"))
+    print("Wrote %s" % game["output"].name)
+    return True
+
+
+def main(argv):
+    games = selected_games(argv)
+    page = read_builds_page()
+    failed = False
+    for game in games:
+        if not build_game(page, game):
+            failed = True
+    return 1 if failed else 0
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(main(sys.argv))

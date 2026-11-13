@@ -822,6 +822,11 @@ TAXIMAP_OPENED
 local bindSerial = 0
 
 function FlightFrame:TAXIMAP_OPENED()
+    -- 0.6 pin hashes on this continent become node ids before any tooltip reads them.
+    local moved = ns.MigrateLegacyTimes and ns.MigrateLegacyTimes()
+    if type(moved) == "number" and FTCConfig and FTCConfig.debug then
+        consoleLog(format("Legacy flight times moved: %d.", moved))
+    end
     -- Pins are drawn after this event. Try now, then twice on the following frames.
     bindSerial = bindSerial + 1
     local serial = bindSerial
