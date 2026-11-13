@@ -20,5 +20,6 @@
 Localization.lua
 LegacyTimes.lua
 FlightTimerClassic.lua
+Data.lua
 DataForever.lua [AllowLoadGameType forever, camelot][ExcludeLoadGameType vanilla]
 DataVanilla.lua [AllowLoadGameType vanilla]

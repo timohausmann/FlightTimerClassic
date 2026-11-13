@@ -454,7 +454,9 @@ function ActualToBase(seconds)
     return math.floor(seconds * 1.2 + 0.5)
 end
 
--- Saved total for this pair first. Else add FTCData edges. A saved total is never one hop.
+-- This character's saved total first. Else a stored pair: a measured route from
+-- Data.lua, or one estimated leg. Else add the legs of the route the game will fly.
+-- Summing a measured route would put the skipped landings back.
 -- The perk is applied on the way out.
 local function ResolveTime(srcId, dstId, slot)
     if not srcId or not dstId then
@@ -464,6 +466,10 @@ local function ResolveTime(srcId, dstId, slot)
     -- A saved 0 is a failed click, not a flight. Fall through to the estimate.
     if type(measured) == "number" and measured > 0 then
         return BaseToActual(measured), false
+    end
+    local known = defaultTimes[srcId] and defaultTimes[srcId][dstId]
+    if type(known) == "number" and known > 0 then
+        return BaseToActual(known), true
     end
     local ids = RouteNodeIDs(slot, srcId, dstId)
     if not ids then
@@ -767,11 +773,33 @@ function FlightFrame:ADDON_LOADED(loaded)
     self:UnregisterEvent("ADDON_LOADED")
 end
 
+-- Data.lua is the measured base. The game file only has direct flights it lacks.
+local function MergeExtra()
+    if type(FTCData) ~= "table" or type(FTCExtra) ~= "table" then
+        return
+    end
+    for src, dests in pairs(FTCExtra) do
+        if type(dests) == "table" then
+            local row = FTCData[src]
+            if type(row) ~= "table" then
+                row = {}
+                FTCData[src] = row
+            end
+            for dst, seconds in pairs(dests) do
+                if row[dst] == nil and type(seconds) == "number" then
+                    row[dst] = seconds
+                end
+            end
+        end
+    end
+end
+
 --[[
 PLAYER_LOGIN
 --]]
 
 function FlightFrame:PLAYER_LOGIN()
+    MergeExtra()
     defaultTimes = FTCData or {}
 
     if FTCData then

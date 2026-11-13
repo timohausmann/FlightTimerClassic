@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
-"""Build node-id flight estimates from the taxi tables on wago.tools.
+"""Build the per-game direct-flight gaps on top of Data.lua.
+
+Data.lua holds the measured routes, shared by both games. This script writes
+only the direct flights that table does not already have.
 
 No arguments writes every game. --game forever or --game vanilla writes one.
-Direct edges only. Measured flights stay in FTCCustomData.
+--from-legacy rebuilds Data.lua from scripts/data/DataLegacy.lua. That is not part of a
+normal run.
 """
 
 import csv
+import heapq
 import html
 import io
 import math
@@ -16,6 +21,8 @@ import urllib.request
 from collections import defaultdict
 from datetime import date
 from pathlib import Path
+
+import legacy_nodes
 
 # TaxiPathNode.Flags bit that means this waypoint's Delay is part of the flight.
 DELAY_FLAG = 2
@@ -28,10 +35,9 @@ DROP_PREFIXES = (
     "Programmer Isle",
 )
 
-# Flown direct routes, no Frequent Flier. The estimate must land within 2 seconds,
+# Flown routes, no Frequent Flier. The result must land within 2 seconds,
 # the same margin the addon uses before it calls a time a correction.
 # (source, dest, min seconds, max seconds)
-# Vanilla stays empty until a Classic Era flight is measured.
 FOREVER_EDGES = (
     (2, 4, 77, 81),  # Stormwind -> Sentinel Hill, flew 79
     (2, 5, 112, 116),  # Stormwind -> Lakeshire, flew 114
@@ -39,6 +45,13 @@ FOREVER_EDGES = (
     (4, 12, 95, 99),  # Sentinel Hill -> Darkshire, flew 97
     (5, 12, 59, 63),  # Lakeshire -> Darkshire, flew 61
     (6, 14, 263, 267),  # Ironforge -> Southshore, flew 265
+)
+
+# Whole routes from Data.lua, including stops. The leg sum is longer.
+MEASURED_ROUTES = (
+    (2, 7, 341, 345),  # Stormwind -> Menethil Harbor, 343
+    (2, 14, 441, 445),  # Stormwind -> Southshore, 443
+    (37, 27, 365, 369),  # Nijel's Point -> Rut'theran Village, 367
 )
 
 BANNED_COMMENT_TEXT = ("Quest Path", "Transport")
@@ -59,7 +72,7 @@ GAMES = (
         "product": "wowf",
         "output": ROOT / "DataForever.lua",
         "yards_per_second": 30,
-        "required_edges": FOREVER_EDGES,
+        "required_edges": FOREVER_EDGES + MEASURED_ROUTES,
     },
     {
         "name": "vanilla",
@@ -67,7 +80,7 @@ GAMES = (
         "product": "wow_classic_era",
         "output": ROOT / "DataVanilla.lua",
         "yards_per_second": 30,
-        "required_edges": (),
+        "required_edges": MEASURED_ROUTES,
     },
 )
 
@@ -147,15 +160,15 @@ def dropped_name(name):
 
 
 def load_nodes(path):
-    """Node id -> name. Pos is the flight master in the world, not the map."""
-    names = {}
+    """Node id -> (name, faction flags). Pos is the flight master in the world."""
+    records = {}
     for row in read_csv(path):
         node_id = as_int(row["ID"])
         name = row.get("Name_lang") or ""
         if node_id == 0 or dropped_name(name):
             continue
-        names[node_id] = name
-    return names
+        records[node_id] = (name, as_int(row.get("Flags")))
+    return records
 
 
 def load_paths(path, names):
@@ -236,21 +249,33 @@ def load_estimates(path, paths, yards_per_second):
     return edges
 
 
+def shortest_route(edges, src, dst):
+    """(seconds, hops) of the quickest sum of direct legs, or None."""
+    best = {src: (0, 0)}
+    heap = [(0, src)]
+    while heap:
+        seconds, node = heapq.heappop(heap)
+        if seconds != best[node][0]:
+            continue
+        if node == dst and node != src:
+            return best[node]
+        for nxt, leg in edges.get(node, {}).items():
+            cand = seconds + leg
+            prev = best.get(nxt)
+            if prev is None or cand < prev[0]:
+                best[nxt] = (cand, best[node][1] + 1)
+                heapq.heappush(heap, (cand, nxt))
+    return None
+
+
 def lua_comment(name):
     cleaned = "".join(ch if ch >= " " else " " for ch in name).strip()
     return cleaned
 
 
-def render(game, build, names, edges):
-    lines = [
-        "-- Direct flight estimates for %s (%s)." % (game["title"], game["name"]),
-        "-- Measured routes live in FTCCustomData.",
-        "-- Build: %s" % build,
-        "-- TAXI_YARDS_PER_SECOND: %d" % game["yards_per_second"],
-        "-- Generated: %s" % date.today().isoformat(),
-        "-- python3 scripts/build_estimates.py --game %s" % game["name"],
-        "FTCData = {",
-    ]
+def render(header, table_name, names, edges):
+    lines = list(header)
+    lines.append("%s = {" % table_name)
     for source in sorted(edges):
         lines.append("  [%d] = { -- %s" % (source, lua_comment(names.get(source, ""))))
         for dest in sorted(edges[source]):
@@ -262,6 +287,52 @@ def render(game, build, names, edges):
     lines.append("}")
     lines.append("")
     return "\n".join(lines)
+
+
+def load_base(path):
+    """Node id -> dest id -> seconds from Data.lua. Missing file is an error."""
+    base_path = Path(path)
+    if not base_path.is_file():
+        raise SystemExit("Missing %s. Rebuild it with --from-legacy." % base_path.name)
+    edges = defaultdict(dict)
+    source = None
+    for line in base_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip().rstrip(",")
+        opened = re.fullmatch(r"\[(\d+)\] = \{.*", stripped)
+        if opened:
+            source = int(opened.group(1))
+            continue
+        pair = re.fullmatch(r"\[(\d+)\] = (\d+).*", stripped)
+        if pair and source is not None:
+            edges[source][int(pair.group(1))] = int(pair.group(2))
+            continue
+        if stripped == "}":
+            source = None
+    return edges
+
+
+def missing_directs(estimates, base):
+    """Direct estimates whose pair is not already measured."""
+    extra = defaultdict(dict)
+    for source, dests in estimates.items():
+        known = base.get(source, {})
+        for dest, seconds in dests.items():
+            if dest not in known:
+                extra[source][dest] = seconds
+    return extra
+
+
+def overlay(base, extra):
+    """Same fill the addon does: extra only where the base has no pair."""
+    merged = defaultdict(dict)
+    for source, dests in base.items():
+        merged[source].update(dests)
+    for source, dests in extra.items():
+        row = merged[source]
+        for dest, seconds in dests.items():
+            if dest not in row:
+                row[dest] = seconds
+    return merged
 
 
 def validate(edges, text, required_edges):
@@ -307,19 +378,105 @@ def selected_games(argv):
         return GAMES
     if len(argv) == 3 and argv[1] == "--game":
         return (game_by_name(argv[2]),)
-    raise SystemExit("Usage: python3 scripts/build_estimates.py [--game forever|vanilla]")
+    raise SystemExit(
+        "Usage: python3 scripts/build_estimates.py [--game forever|vanilla | --from-legacy]"
+    )
 
 
-def build_game(page, game):
-    """Download one product and write its data file. False when a check fails."""
+def choose_conflicts(candidates, estimates):
+    """One duration per pair. Two faction times: keep the one nearer the leg sum."""
+    chosen = defaultdict(dict)
+    conflicts = []
+    for src, dst in sorted(candidates):
+        times = sorted(set(candidates[(src, dst)]))
+        if len(times) == 1:
+            chosen[src][dst] = times[0]
+            continue
+        found = shortest_route(estimates, src, dst)
+        if found is None:
+            # No path to judge by. The shorter stored time is the one that
+            # agrees with the other measured routes, which run under the sum.
+            pick = times[0]
+        else:
+            total = found[0]
+            pick = min(times, key=lambda seconds: (abs(seconds - total), seconds))
+        chosen[src][dst] = pick
+        conflicts.append((src, dst, times, pick, None if found is None else found[0]))
+    return chosen, conflicts
+
+
+def measured_from_legacy(records, estimates):
+    """DataLegacy.lua hashes as node-id pairs. Needs the taxi nodes for names."""
+    import legacy_nodes
+
+    names = {node_id: name for node_id, (name, _flags) in records.items()}
+    routes = legacy_nodes.load_routes(ROOT / "scripts" / "data" / "DataLegacy.lua")
+    bound = legacy_nodes.node_ids_for(routes, records)
+    candidates = legacy_nodes.measured_candidates(routes, bound)
+    present = {}
+    for (src, dst), times in candidates.items():
+        if src in names and dst in names:
+            present[(src, dst)] = times
+    chosen, conflicts = choose_conflicts(present, estimates)
+    return names, chosen, conflicts
+
+
+def write_legacy_base(page):
+    """Write Data.lua from DataLegacy.lua. Not used by a normal build."""
+    game = game_by_name("vanilla")
     build = read_build(page, game["product"])
     tables = download_tables(build, game["product"])
-    names = load_nodes(tables["TaxiNodes"])
+    records = load_nodes(tables["TaxiNodes"])
+    names = {node_id: name for node_id, (name, _flags) in records.items()}
     paths = load_paths(tables["TaxiPath"], names)
-    edges = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
-    text = render(game, build, names, edges)
-    problems = validate(edges, text, game["required_edges"])
-    report(game, build, edges)
+    estimates = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
+    names, chosen, conflicts = measured_from_legacy(records, estimates)
+    header = [
+        "-- Measured routes for both games, by flight-master node id.",
+        "-- Converted once from scripts/data/DataLegacy.lua.",
+        "-- Direct flights with no measurement are in DataVanilla.lua or DataForever.lua.",
+    ]
+    text = render(header, "FTCData", names, chosen)
+    (ROOT / "Data.lua").write_bytes(text.encode("utf-8"))
+    count = sum(len(dests) for dests in chosen.values())
+    print("Wrote Data.lua (%d routes)" % count)
+    for src, dst, times, pick, total in conflicts:
+        print(
+            "Two times for %s -> %s: %s, chose %ds (legs %s)"
+            % (
+                names.get(src, str(src)).split(",")[0],
+                names.get(dst, str(dst)).split(",")[0],
+                ", ".join("%ds" % seconds for seconds in times),
+                pick,
+                "none" if total is None else "%ds" % total,
+            )
+        )
+    return True
+
+
+def build_game(page, game, base):
+    """Download one product and write the direct flights Data.lua does not have."""
+    build = read_build(page, game["product"])
+    tables = download_tables(build, game["product"])
+    records = load_nodes(tables["TaxiNodes"])
+    names = {node_id: name for node_id, (name, _flags) in records.items()}
+    paths = load_paths(tables["TaxiPath"], names)
+    estimates = load_estimates(tables["TaxiPathNode"], paths, game["yards_per_second"])
+    extra = missing_directs(estimates, base)
+    merged = overlay(base, extra)
+    header = [
+        "-- Direct flights for %s (%s) that Data.lua does not have." % (game["title"], game["name"]),
+        "-- Path length. A measured route stays in Data.lua.",
+        "-- Build: %s" % build,
+        "-- TAXI_YARDS_PER_SECOND: %d" % game["yards_per_second"],
+        "-- Generated: %s" % date.today().isoformat(),
+        "-- python3 scripts/build_estimates.py --game %s" % game["name"],
+    ]
+    text = render(header, "FTCExtra", names, extra)
+    problems = validate(merged, text, game["required_edges"])
+    report(game, build, merged)
+    extra_count = sum(len(dests) for dests in extra.values())
+    print("Extra direct flights: %d" % extra_count)
     if problems:
         for problem in problems:
             print(problem, file=sys.stderr)
@@ -330,11 +487,14 @@ def build_game(page, game):
 
 
 def main(argv):
+    if len(argv) == 2 and argv[1] == "--from-legacy":
+        return 0 if write_legacy_base(read_builds_page()) else 1
     games = selected_games(argv)
+    base = load_base(ROOT / "Data.lua")
     page = read_builds_page()
     failed = False
     for game in games:
-        if not build_game(page, game):
+        if not build_game(page, game, base):
             failed = True
     return 1 if failed else 0
 
