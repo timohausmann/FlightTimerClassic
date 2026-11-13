@@ -15,7 +15,7 @@
 ## Notes-zhCN: WoW Forever 与 Classic Era 飞行时间。在一名角色飞过该路线之前为预计时间。
 ## Notes-zhTW: WoW Forever 與 Classic Era 飛行時間。在一名角色飛過該路線之前為預計時間。
 ## Author: trashyger
-## Version: 0.7.0
+## Version: 0.8.0
 ## SavedVariables: FTCCustomData, FTCConfig
 Localization.lua
 LegacyTimes.lua
