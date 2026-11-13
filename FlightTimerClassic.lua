@@ -119,19 +119,13 @@ local function OnTaxi()
     return not not onTaxi
 end
 
--- Cancel the flight watch. The click time or the air time is still set here, so it can be logged.
-local function StopFlightWatch(reason)
+-- Cancel the flight watch.
+local function StopFlightWatch()
     if not flightTicker then
         return
     end
-    local began = pendingSince or startTime
-    local waited = began and (GetTime() - began) or 0
     flightTicker:Cancel()
     flightTicker = nil
-    -- English on purpose: this line only shows with /ftc debug.
-    if FTCConfig and FTCConfig.debug then
-        consoleLog(format("Flight watch stopped after %.1fs (%s).", waited, reason))
-    end
 end
 
 local function BeginFlightClock()
@@ -146,8 +140,8 @@ local function BeginFlightClock()
 end
 
 -- Drop a click that never took off. Keep the flight master node; the map is still open.
-local function AbortTakeoff(reason)
-    StopFlightWatch(reason or "aborted")
+local function AbortTakeoff()
+    StopFlightWatch()
     pendingSince = nil
     confirmedTaxi = nil
     startTime = nil
@@ -161,7 +155,7 @@ local function AbortTakeoff(reason)
 end
 
 local function ResetFlight()
-    StopFlightWatch("reset")
+    StopFlightWatch()
     flightStarted = false
     pendingSince = nil
     confirmedTaxi = nil
@@ -318,7 +312,7 @@ local function WatchFlight()
         if onTaxi ~= false then
             BeginFlightClock()
         elseif GetTime() - pendingSince > TAKEOFF_WAIT then
-            AbortTakeoff("still on the ground")
+            AbortTakeoff()
             return
         end
     end
@@ -338,7 +332,7 @@ local function WatchFlight()
 end
 
 local function StartFlightWatch()
-    -- The caller already stopped the previous watch, while its start time was still set.
+    -- TakeTaxiNode already stops a previous watch. Cancel here if one is still running.
     if flightTicker then
         flightTicker:Cancel()
         flightTicker = nil
@@ -352,7 +346,7 @@ end
 local function CancelFlight()
     consoleLog(L.FlightCancelled)
     -- Nothing to save on landing: the clock is cleared before control returns.
-    AbortTakeoff("cancelled")
+    AbortTakeoff()
 end
 
 -- The map the player is looking at. GetTaxiMapID stays on the opener's continent.
@@ -781,7 +775,9 @@ function FlightFrame:PLAYER_LOGIN()
     defaultTimes = FTCData or {}
 
     if FTCData then
-        consoleLog(format(L.Ready, Hi("/ftc help")))
+        if not FTCConfig or not FTCConfig.mute then
+            consoleLog(format(L.Ready, Hi("/ftc help")))
+        end
     else
         consoleLog(format(L.NoData, Hi("/ftc help")))
     end
@@ -856,8 +852,8 @@ TakeTaxiNode
 
 hooksecurefunc("TakeTaxiNode", function(slot)
 
-    -- A second click replaces a wait that has not left the ground. Log that wait first.
-    StopFlightWatch("restarted")
+    -- A second click replaces a wait that has not left the ground.
+    StopFlightWatch()
     flightStarted = true
     if not currentId then
         ReadCurrentNode()
