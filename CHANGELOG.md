@@ -12,6 +12,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Update code and estimates for Classic Era (1.15.9).
 - Convert previous Classic Era data when opening the continent's flight map.
 
+### Changed
+
+- `/ftc mute` sets the login message and the flight report separately (`login`, `report`, `all`, `none`). A saved on/off mute becomes both settings.
+- Route estimates prefer historic dataset times. A direct flight those records do not contain is still estimated from the path length. When game specific direct path estimates differ by more than 2 seconds, the path estimate is used.
+
+### Fixed
+
+- Known long flights are no longer too high. Before, takeoff and landing at every flight master was part of the estimate, which, for example, increased routes only passing by Ironforge by 40 seconds.
+- Ratchet and Marshal's Refuge keep no single time. Alliance and Horde fly different routes there, so the timer adds the stops of the route being flown.
+
 ## [0.7.0] - 2026-11-11
 
 ### Added

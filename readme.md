@@ -16,7 +16,11 @@ The time shown for a route is an estimate from the path length until a character
 
 Available commands: 
 
-* `/ftc mute` – Turn info messages on or off.
+* `/ftc mute` – Show whether the login message and the flight report are muted.
+* `/ftc mute login` – Mute or show the login message.
+* `/ftc mute report` – Mute or show the flight report.
+* `/ftc mute all` – Mute the login message and the flight report.
+* `/ftc mute none` – Show the login message and the flight report.
 * `/ftc show` – Show the timer for positioning.
 * `/ftc hide` – Hide the timer.
 * `/ftc debug` – Turn debug output on or off.
